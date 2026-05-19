@@ -1,0 +1,46 @@
+# Flutter
+app_pretend/.dart_tool/
+app_pretend/.packages
+app_pretend/build/
+app_pretend/.flutter-plugins
+app_pretend/.flutter-plugins-dependencies
+app_pretend/ios/Pods/
+app_pretend/ios/.symlinks/
+app_pretend/android/.gradle/
+app_pretend/android/local.properties
+app_pretend/android/key.properties
+app_pretend/*.iml
+app_pretend/pubspec.lock
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+.venv
+venv/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.log
+*.tmp
+src/temp/
+
+# Project specific
+app_pretend/ngrok.exe
+app_pretend/*.txt
+app_pretend/lt_output.txt
+app_pretend/preview_lt_out.txt
+app_pretend/new_tunnel_output.txt
+app_pretend/flutter_server.log
