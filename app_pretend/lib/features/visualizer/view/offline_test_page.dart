@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../core/services/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../visualizer/components/ecg_waveform_painter.dart';
@@ -58,12 +59,12 @@ class _OfflineTestPageState extends State<OfflineTestPage> {
         type: FileType.custom,
         allowedExtensions: ['mat'],
         allowMultiple: false,
+        withData: true, // Web 需要读取 bytes
       );
 
       if (result == null || result.files.isEmpty) return;
 
       final file = result.files.first;
-      if (file.path == null) return;
 
       setState(() {
         _fileName = file.name;
@@ -73,7 +74,20 @@ class _OfflineTestPageState extends State<OfflineTestPage> {
       });
 
       // 1. 上传 .mat 文件并解析
-      final upload = await _api.uploadMatFile(file.path!);
+      final UploadResult upload;
+      if (kIsWeb) {
+        // Web 平台：使用 bytes
+        upload = await _api.uploadMatFile(
+          bytes: file.bytes,
+          fileName: file.name,
+        );
+      } else {
+        // 原生平台：使用文件路径
+        if (file.path == null) {
+          throw Exception('无法获取文件路径');
+        }
+        upload = await _api.uploadMatFile(filePath: file.path);
+      }
 
       // 2. 计算 HRV 指标
       final hrv = await _api.computeHrv(upload.fileId);

@@ -73,7 +73,9 @@ class _VisualizerPageState extends State<VisualizerPage>
           color: Colors.black, // 示波器深色背景
           child: Column(
             children: [
+              // EEG + ECG 双通道波形
               Expanded(
+                flex: 3,
                 child: _WaveformCanvas(
                   title: 'CH1: EEG (LFP)',
                   sampleRate: state.eegStream.sampleRate,
@@ -85,6 +87,7 @@ class _VisualizerPageState extends State<VisualizerPage>
               ),
               const Divider(color: Colors.white24, height: 1),
               Expanded(
+                flex: 3,
                 child: _WaveformCanvas(
                   title: 'CH2: ECG (HRV)',
                   sampleRate: state.ecgStream.sampleRate,
@@ -92,9 +95,13 @@ class _VisualizerPageState extends State<VisualizerPage>
                   data: state.ecgStream.waveform,
                   timeScale: _timeScale,
                   isPaused: _isPaused,
+                  rPeakIndices: state.useBleSource ? state.rPeakIndices : null,
                 ),
               ),
               _buildControlOverlay(),
+              // BLE 实时数据面板
+              if (state.useBleSource)
+                _BleDataPanel(state: state),
             ],
           ),
         );
@@ -148,6 +155,184 @@ class _VisualizerPageState extends State<VisualizerPage>
   }
 }
 
+/// BLE 实时数据面板 — HRV指标 / 设备信息 / 压力分值
+class _BleDataPanel extends StatelessWidget {
+  final GlobalAppState state;
+  const _BleDataPanel({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black,
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Divider(color: Colors.white12, height: 1),
+          const SizedBox(height: 8),
+          // === 板块一：HRV 指标 ===
+          _sectionTitle('HRV 指标'),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              _hrvItem('心率', state.lastHr?.toStringAsFixed(1) ?? '--', 'BPM', Icons.favorite, Colors.pinkAccent),
+              _hrvItem('RMSSD', state.lastRmssd?.toStringAsFixed(1) ?? '--', 'ms', Icons.monitor_heart_outlined, Colors.orangeAccent),
+              _hrvItem('PNN50', state.lastPnn50?.toStringAsFixed(1) ?? '--', '%', Icons.analytics, Colors.lightBlueAccent),
+              _hrvItem('LF/HF', state.lastLfHf?.toStringAsFixed(2) ?? '--', '', Icons.show_chart, Colors.purpleAccent),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // === 板块二：设备信息 ===
+          _sectionTitle('设备信息'),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              _infoItem(Icons.battery_std, '电量', '${state.batteryPct}%', state.batteryPct),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // === 板块三：压力分值 ===
+          _sectionTitle('压力分值'),
+          const SizedBox(height: 4),
+          _buildStressSection(),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String title) {
+    return Text(title,
+      style: const TextStyle(
+        color: Colors.white54,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.5,
+      ),
+    );
+  }
+
+  Widget _hrvItem(String label, String value, String unit, IconData icon, Color iconColor) {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withAlpha(8),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 10, color: iconColor),
+                const SizedBox(width: 4),
+                Text(label, style: const TextStyle(color: Colors.white38, fontSize: 9)),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(value,
+                  style: const TextStyle(
+                    color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (unit.isNotEmpty)
+                  Text(' $unit', style: const TextStyle(color: Colors.white38, fontSize: 10)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoItem(IconData icon, String label, String value, int batteryPct) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: batteryPct > 20 ? Colors.greenAccent : Colors.redAccent),
+        const SizedBox(width: 8),
+        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 12)),
+        const SizedBox(width: 8),
+        Text(value,
+          style: const TextStyle(
+            color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStressSection() {
+    final engineState = state.engineState;
+
+    // 引擎状态标签
+    String engineLabel;
+    Color engineColor;
+    switch (engineState) {
+      case 0:
+        engineLabel = '未校准';
+        engineColor = Colors.grey;
+      case 1:
+        engineLabel = '校准中';
+        engineColor = Colors.orangeAccent;
+      case 2:
+        engineLabel = '诱导中';
+        engineColor = Colors.redAccent;
+      case 3:
+        engineLabel = state.isStressed ? '应激' : '平静';
+        engineColor = state.isStressed ? Colors.redAccent : Colors.greenAccent;
+      default:
+        engineLabel = '--';
+        engineColor = Colors.grey;
+    }
+
+    // 始终显示压力分值（百分制整数），与设备 score_smoothed 一致
+    final score = (state.emotionScore * 100).clamp(0, 100).toInt();
+
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: engineColor.withAlpha(25),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: engineColor.withAlpha(80)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                engineState == 3
+                    ? (state.isStressed ? Icons.warning_amber_rounded : Icons.sentiment_satisfied_alt)
+                    : Icons.info_outline,
+                size: 20, color: engineColor,
+              ),
+              const SizedBox(width: 8),
+              Text('$score',
+                style: TextStyle(
+                  color: engineColor, fontSize: 28, fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(engineLabel,
+                style: TextStyle(
+                  color: engineColor.withAlpha(180),
+                  fontSize: 12, fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _WaveformCanvas extends StatelessWidget {
   final String title;
   final int sampleRate;
@@ -155,6 +340,7 @@ class _WaveformCanvas extends StatelessWidget {
   final List<double> data;
   final double timeScale;
   final bool isPaused;
+  final List<int>? rPeakIndices;
 
   const _WaveformCanvas({
     required this.title,
@@ -163,6 +349,7 @@ class _WaveformCanvas extends StatelessWidget {
     required this.data,
     required this.timeScale,
     required this.isPaused,
+    this.rPeakIndices,
   });
 
   @override
@@ -180,6 +367,7 @@ class _WaveformCanvas extends StatelessWidget {
             color: color,
             timeScale: timeScale,
             sampleRate: sampleRate,
+            rPeakOffsets: rPeakIndices,
           ),
         ),
         Positioned(
@@ -224,17 +412,37 @@ class _WaveformPainter extends CustomPainter {
   final Color color;
   final double timeScale;
   final int sampleRate;
+  final List<int>? rPeakOffsets;
 
   _WaveformPainter({
     required this.data,
     required this.color,
     required this.timeScale,
     required this.sampleRate,
+    this.rPeakOffsets,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (data.isEmpty) return;
+    if (data.isEmpty) {
+      // 无数据时显示提示文字
+      final textPainter = TextPainter(
+        text: const TextSpan(
+          text: '等待数据…',
+          style: TextStyle(color: Colors.white24, fontSize: 14),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+      textPainter.paint(
+        canvas,
+        Offset(
+          (size.width - textPainter.width) / 2,
+          (size.height - textPainter.height) / 2,
+        ),
+      );
+      return;
+    }
 
     final paint = Paint()
       ..color = color
@@ -242,23 +450,41 @@ class _WaveformPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
 
     final path = Path();
-    
+
     // 显示的最大点数 = timeScale * sampleRate
     int visiblePoints = (timeScale * sampleRate).toInt();
-    
+
     // 从最新的数据开始往前画
     int startIdx = data.length > visiblePoints ? data.length - visiblePoints : 0;
-    
+    final visibleData = data.sublist(startIdx);
+
     double xStep = size.width / visiblePoints;
     double midY = size.height / 2;
-    
-    // 假设数据范围在 -100 到 100 之间，进行缩放
-    double yScale = size.height / 200;
 
-    for (int i = 0; i < data.length - startIdx; i++) {
+    // 自动缩放：根据可见数据的实际范围计算
+    double dataMin = visibleData[0];
+    double dataMax = visibleData[0];
+    for (final v in visibleData) {
+      if (v < dataMin) dataMin = v;
+      if (v > dataMax) dataMax = v;
+    }
+    final dataRange = dataMax - dataMin;
+    double yScale;
+    double dataMid = midY;
+    if (dataRange < 1e-10) {
+      // 全零或常量值，用默认缩放
+      yScale = size.height / 200;
+    } else {
+      // 加 10% 边距防止触顶
+      final adjustedRange = dataRange * 1.1;
+      yScale = size.height / adjustedRange;
+      dataMid = midY + ((dataMax + dataMin) / 2) * yScale;
+    }
+
+    for (int i = 0; i < visibleData.length; i++) {
       double x = i * xStep;
-      double y = midY - (data[startIdx + i] * yScale);
-      
+      double y = dataMid - visibleData[i] * yScale;
+
       if (i == 0) {
         path.moveTo(x, y);
       } else {
@@ -267,8 +493,30 @@ class _WaveformPainter extends CustomPainter {
     }
 
     canvas.drawPath(path, paint);
+
+    // 绘制 R 峰标记
+    if (rPeakOffsets != null && rPeakOffsets!.isNotEmpty) {
+      final rDotPaint = Paint()
+        ..color = Colors.red
+        ..style = PaintingStyle.fill;
+      final rLinePaint = Paint()
+        ..color = Colors.red.withAlpha(80)
+        ..strokeWidth = 0.5;
+
+      for (final idx in rPeakOffsets!) {
+        // idx 为 waveform 中的局部索引（0 = 第一点）
+        if (idx < startIdx || idx >= data.length) continue;
+
+        final localIdx = idx - startIdx;
+        final x = localIdx * xStep;
+        final y = dataMid - data[idx] * yScale;
+
+        canvas.drawLine(Offset(x, 0), Offset(x, size.height), rLinePaint);
+        canvas.drawCircle(Offset(x, y), 3.0, rDotPaint);
+      }
+    }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true; // 实时重绘
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

@@ -1,51 +1,390 @@
-/// BLE 数据包解析器框架
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+
+/// BLE ASCII 文本协议解析器
 ///
-/// 将硬件 BLE 字节流解析为结构化数据。
-/// 当前为接口定义，具体解析逻辑需根据硬件协议文档填充。
-///
-/// 预期数据包结构（以硬件文档为准）:
-///   [帧头2B][包类型1B][数据长度1B][数据区N B][校验和1B]
+/// 协议格式（START/END 边界，XOR8 CRC）：
+/// ```
+/// START
+/// SYS:mode,source_fs,process_fs,batt_v,batt_pct,charge
+/// DBG:DCRC,ok,bad,no_crc
+/// ECG:v1,v2,v3,...,vN
+/// RPK:num,idx1,idx2,...,idxN
+/// HRV:rdy60,rdy300,hr,rmssd,pnn50,lf,hf,lf_hf
+/// STR:state,calm_done,calm_need,stress_done,stress_need,score_raw,score_smoothed,is_stressed,infer_count
+/// PKTCRC:XX
+/// END
+/// ```
 class BleParser {
-  /// 解析硬件发来的指标数据包
-  /// [bytes] BLE Notify 收到的原始字节
-  /// 返回结构化指标，解析失败返回 null
-  HardwareMetricsPacket? parse(List<int> bytes) {
-    // TODO: 根据实际协议文档实现解析
-    // 1. 校验帧头
-    // 2. 校验校验和
-    // 3. 根据包类型分流解析
-    // 4. 提取各字段值
-    return null;
+  final List<int> _buffer = [];
+  static const int maxBufferSize = 102400; // 100KB
+
+  /// CRC 统计计数器
+  int crcOk = 0;
+  int crcBad = 0;
+  int crcMissing = 0;
+
+  /// 宽松模式：CRC 校验失败时仍保留数据而非丢弃整包
+  bool permissive = true;
+
+  /// 输入 BLE 原始字节，尝试提取 0~N 个完整数据包
+  List<BlePacket> feed(List<int> chunk) {
+    _buffer.addAll(chunk);
+
+    // 防内存溢出
+    if (_buffer.length > maxBufferSize) {
+      debugPrint('[Parser] 缓冲区溢出 (${_buffer.length} bytes)，清空缓冲区');
+      _buffer.clear();
+      return [];
+    }
+
+    final packets = <BlePacket>[];
+    final text = utf8.decode(_buffer, allowMalformed: true);
+
+    int searchStart = 0;
+    while (true) {
+      final startIdx = text.indexOf('START', searchStart);
+      if (startIdx < 0) break;
+
+      final endIdx = text.indexOf('END', startIdx + 5);
+      if (endIdx < 0) break;
+
+      // 提取 START ~ END 之间的完整文本
+      final packetText = text.substring(startIdx, endIdx + 3);
+
+      final packet = _parsePacket(packetText);
+      if (packet != null) {
+        packets.add(packet);
+      }
+
+      searchStart = endIdx + 3;
+    }
+
+    // 清理已处理的字节
+    if (searchStart > 0) {
+      final consumed = utf8.encode(text.substring(0, searchStart)).length;
+      if (consumed > 0 && consumed <= _buffer.length) {
+        _buffer.removeRange(0, consumed);
+      }
+    }
+
+    return packets;
   }
 
-  /// 解析 ECG 波形数据
-  List<double> _parseEcgWaveform(List<int> payload) {
-    // TODO: 按协议转换字节为浮点采样值
-    // 考虑因素：大小端、有无符号、缩放因子
-    return [];
+  BlePacket? _parsePacket(String text) {
+    // 提取包体（START 之后、PKTCRC 之前的内容用于 CRC 计算）
+    final bodyEnd = text.lastIndexOf('PKTCRC:');
+    if (bodyEnd < 0) {
+      crcMissing++;
+      debugPrint('[Parser] 缺少 PKTCRC 行 (total: $crcMissing)');
+      if (!permissive) return null;
+    } else {
+      final crcLineEnd = text.indexOf('\n', bodyEnd);
+      final crcLine = (crcLineEnd > bodyEnd)
+          ? text.substring(bodyEnd, crcLineEnd).trim()
+          : text.substring(bodyEnd).trim();
+
+      // 校验 CRC
+      final expectedCrc = _parseHexCrc(crcLine);
+      if (expectedCrc == null) {
+        crcMissing++;
+        debugPrint('[Parser] CRC 行格式异常: "$crcLine"');
+        if (!permissive) return null;
+      } else {
+        // CRC 计算范围：START 之后、PKTCRC 行之前的所有字节
+        final crcBody = text.substring(5, bodyEnd); // 跳过 "START"
+        if (!_verifyCrc(crcBody, expectedCrc)) {
+          crcBad++;
+          debugPrint('[Parser] CRC 校验失败 #$crcBad: expected=0x${expectedCrc.toRadixString(16).padLeft(2, '0')}, body="${crcBody.length > 80 ? "${crcBody.substring(0, 80)}..." : crcBody}"');
+          if (!permissive) return null;
+        } else {
+          crcOk++;
+        }
+      }
+    }
+
+    // 按行解析
+    final lines = _parseLines(text);
+    if (lines.isEmpty) return null;
+
+    try {
+      // SYS
+      final sysParts = _splitLine(lines['SYS']);
+      final mode = sysParts.isNotEmpty ? int.tryParse(sysParts[0]) ?? 0 : 0;
+      final sourceFs = sysParts.length > 1 ? _parseDouble(sysParts[1]) ?? 500.0 : 500.0;
+      final processFs = sysParts.length > 2 ? _parseDouble(sysParts[2]) ?? 500.0 : 500.0;
+      final battV = sysParts.length > 3 ? _parseDouble(sysParts[3]) ?? 0.0 : 0.0;
+      final battPct = sysParts.length > 4 ? int.tryParse(sysParts[4]) ?? 0 : 0;
+      final charge = sysParts.length > 5 ? int.tryParse(sysParts[5]) ?? 0 : 0;
+
+      // ECG
+      final ecgWaveform = _parseEcgLine(lines['ECG']);
+
+      // RPK
+      final (rPeakCount, rPeakIndices) = _parseRpkLine(lines['RPK']);
+
+      // HRV (optional)
+      int? rdy60;
+      int? rdy300;
+      double? hr;
+      double? rmssd;
+      double? pnn50;
+      double? lf;
+      double? hf;
+      double? lfHf;
+
+      if (lines.containsKey('HRV')) {
+        final hrvParts = _splitLine(lines['HRV']);
+        if (hrvParts.length >= 8) {
+          rdy60 = int.tryParse(hrvParts[0]);
+          rdy300 = int.tryParse(hrvParts[1]);
+          hr = _parseDouble(hrvParts[2]);
+          rmssd = _parseDouble(hrvParts[3]);
+          pnn50 = _parseDouble(hrvParts[4]);
+          lf = _parseDouble(hrvParts[5]);
+          hf = _parseDouble(hrvParts[6]);
+          lfHf = _parseDouble(hrvParts[7]);
+        }
+      }
+
+      // STR
+      final strParts = _splitLine(lines['STR']);
+      final strState = strParts.isNotEmpty ? int.tryParse(strParts[0]) ?? 0 : 0;
+      final calmDone = strParts.length > 1 ? int.tryParse(strParts[1]) ?? 0 : 0;
+      final calmNeed = strParts.length > 2 ? int.tryParse(strParts[2]) ?? 7 : 7;
+      final stressDone = strParts.length > 3 ? int.tryParse(strParts[3]) ?? 0 : 0;
+      final stressNeed = strParts.length > 4 ? int.tryParse(strParts[4]) ?? 2 : 2;
+      final scoreRaw = strParts.length > 5 ? _parseDouble(strParts[5]) ?? 0.0 : 0.0;
+      final scoreSmoothed = strParts.length > 6 ? _parseDouble(strParts[6]) ?? 0.0 : 0.0;
+      final isStressed = strParts.length > 7 ? int.tryParse(strParts[7]) ?? 0 : 0;
+      final inferCount = strParts.length > 8 ? int.tryParse(strParts[8]) ?? 0 : 0;
+
+      // DBG:DCRC（可选）
+      int? dbgCrcOk;
+      int? dbgCrcBad;
+      int? dbgNoCrc;
+      if (lines.containsKey('DBG')) {
+        final dbgLine = lines['DBG']!;
+        if (dbgLine.startsWith('DCRC,')) {
+          final dbgParts = _splitLine(dbgLine.substring(5));
+          dbgCrcOk = dbgParts.isNotEmpty ? int.tryParse(dbgParts[0]) : null;
+          dbgCrcBad = dbgParts.length > 1 ? int.tryParse(dbgParts[1]) : null;
+          dbgNoCrc = dbgParts.length > 2 ? int.tryParse(dbgParts[2]) : null;
+        }
+      }
+
+      return BlePacket(
+        mode: mode,
+        sourceFs: sourceFs,
+        processFs: processFs,
+        battV: battV,
+        battPct: battPct,
+        charge: charge,
+        ecgWaveform: ecgWaveform,
+        rPeakCount: rPeakCount,
+        rPeakIndices: rPeakIndices,
+        rdy60: rdy60,
+        rdy300: rdy300,
+        hr: hr,
+        rmssd: rmssd,
+        pnn50: pnn50,
+        lf: lf,
+        hf: hf,
+        lfHf: lfHf,
+        strState: strState,
+        calmDone: calmDone,
+        calmNeed: calmNeed,
+        stressDone: stressDone,
+        stressNeed: stressNeed,
+        scoreRaw: scoreRaw,
+        scoreSmoothed: scoreSmoothed,
+        isStressed: isStressed,
+        inferCount: inferCount,
+        dbgCrcOk: dbgCrcOk,
+        dbgCrcBad: dbgCrcBad,
+        dbgNoCrc: dbgNoCrc,
+      );
+    } catch (e) {
+      debugPrint('[Parser] 解析异常: $e');
+      return null;
+    }
   }
 
-  /// 解析 HRV 指标
-  HrvMetricsPacket? _parseHrvMetrics(List<int> payload) {
-    // TODO: 按协议提取心率、SDNN、RMSSD、LF/HF等
-    return null;
+  /// XOR8 校验
+  bool _verifyCrc(String body, int expectedCrc) {
+    final bytes = utf8.encode(body);
+    int crc = 0;
+    for (final byte in bytes) {
+      crc ^= byte;
+    }
+    return crc == expectedCrc;
   }
 
-  /// 解析 EEG 频带能量
-  EegBandPacket? _parseEegBands(List<int> payload) {
-    // TODO: 按协议提取 Delta/Theta/Alpha/Beta
-    return null;
+  /// 解析 PKTCRC:XX 行，返回十六进制值
+  int? _parseHexCrc(String line) {
+    final colonIdx = line.indexOf(':');
+    if (colonIdx < 0) return null;
+    final hexStr = line.substring(colonIdx + 1).trim();
+    if (hexStr.isEmpty) return null;
+    return int.tryParse(hexStr, radix: 16);
   }
 
-  /// 解析设备状态
-  DeviceStatusPacket? _parseDeviceStatus(List<int> payload) {
-    // TODO: 按协议提取电量、运行状态、当前模式
-    return null;
+  /// 将文本分割为行，返回 key-value 映射
+  Map<String, String> _parseLines(String text) {
+    final lines = text.split('\n');
+    final map = <String, String>{};
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      if (trimmed == 'START' || trimmed == 'END') continue;
+      if (trimmed.startsWith('PKTCRC:')) continue;
+
+      final colonIdx = trimmed.indexOf(':');
+      if (colonIdx < 0) continue;
+
+      // 处理 DBG:DCRC 这种带冒号的 key
+      // 如果第二个字符是 ':' 或 key 以 DBG 开头
+      String key;
+      String value;
+      if (trimmed.startsWith('DBG:')) {
+        key = 'DBG';
+        value = trimmed.substring(4);
+      } else {
+        key = trimmed.substring(0, colonIdx);
+        value = trimmed.substring(colonIdx + 1);
+      }
+
+      map[key] = value;
+    }
+
+    return map;
+  }
+
+  /// 解析 ECG 行：逗号分隔的浮点数列表
+  List<double> _parseEcgLine(String? value) {
+    if (value == null || value.isEmpty) return [];
+    final parts = value.split(',');
+    final result = <double>[];
+    for (final part in parts) {
+      final trimmed = part.trim();
+      if (trimmed.isEmpty) continue;
+      final num = _parseDouble(trimmed);
+      if (num != null) {
+        result.add(num);
+      }
+    }
+    return result;
+  }
+
+  /// 解析 RPK 行：首字段为计数，后续为索引
+  (int, List<int>) _parseRpkLine(String? value) {
+    if (value == null || value.isEmpty) return (0, []);
+    final parts = value.split(',');
+    if (parts.isEmpty) return (0, []);
+    final count = int.tryParse(parts[0].trim()) ?? 0;
+    final indices = <int>[];
+    for (int i = 1; i < parts.length; i++) {
+      final idx = int.tryParse(parts[i].trim());
+      if (idx != null) indices.add(idx);
+    }
+    return (count, indices);
+  }
+
+  List<String> _splitLine(String? value) {
+    if (value == null || value.isEmpty) return [];
+    return value.split(',').map((s) => s.trim()).toList();
+  }
+
+  double? _parseDouble(String s) {
+    return double.tryParse(s.trim());
+  }
+
+  void clear() {
+    _buffer.clear();
   }
 }
 
-/// 硬件数据的完整指标集合
-/// 根据硬件协议文档填充
+/// 一个完整的 BLE 数据包，包含所有解析后的字段
+class BlePacket {
+  // SYS
+  final int mode;
+  final double sourceFs;
+  final double processFs;
+  final double battV;
+  final int battPct;
+  final int charge;
+
+  // ECG
+  final List<double> ecgWaveform;
+
+  // RPK
+  final int rPeakCount;
+  final List<int> rPeakIndices;
+
+  // HRV (可能为 null — HRV 行不是每个包都有)
+  final int? rdy60;
+  final int? rdy300;
+  final double? hr;
+  final double? rmssd;
+  final double? pnn50;
+  final double? lf;
+  final double? hf;
+  final double? lfHf;
+
+  // STR
+  final int strState;
+  final int calmDone;
+  final int calmNeed;
+  final int stressDone;
+  final int stressNeed;
+  final double scoreRaw;
+  final double scoreSmoothed;
+  final int isStressed;
+  final int inferCount;
+
+  // DBG（可选）
+  final int? dbgCrcOk;
+  final int? dbgCrcBad;
+  final int? dbgNoCrc;
+
+  const BlePacket({
+    this.mode = 0,
+    this.sourceFs = 500,
+    this.processFs = 500,
+    this.battV = 0.0,
+    this.battPct = 0,
+    this.charge = 0,
+    this.ecgWaveform = const [],
+    this.rPeakCount = 0,
+    this.rPeakIndices = const [],
+    this.rdy60,
+    this.rdy300,
+    this.hr,
+    this.rmssd,
+    this.pnn50,
+    this.lf,
+    this.hf,
+    this.lfHf,
+    this.strState = 0,
+    this.calmDone = 0,
+    this.calmNeed = 7,
+    this.stressDone = 0,
+    this.stressNeed = 2,
+    this.scoreRaw = 0.0,
+    this.scoreSmoothed = 0.0,
+    this.isStressed = 0,
+    this.inferCount = 0,
+    this.dbgCrcOk,
+    this.dbgCrcBad,
+    this.dbgNoCrc,
+  });
+
+  /// HRV 行是否在此包中存在
+  bool get hasHrv => rdy60 != null;
+}
+
+/// 硬件数据的完整指标集合（保留以兼容旧代码）
 class HardwareMetricsPacket {
   final List<double>? ecgWaveform;
   final List<double>? eegWaveform;
