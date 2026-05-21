@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>此应用需要蓝牙权限连接到 HRV 胸带设备</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>此应用需要蓝牙权限与 KT6368A 设备通信</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

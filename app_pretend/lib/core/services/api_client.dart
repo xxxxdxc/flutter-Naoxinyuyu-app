@@ -105,21 +105,37 @@ class ApiClient {
     }
   }
 
-  /// 上传 .mat 文件并解析
-  /// [filePath] .mat 文件的本地路径
-  Future<UploadResult> uploadMatFile(String filePath) async {
-    final file = File(filePath);
-    if (!file.existsSync()) {
-      throw Exception('文件不存在: $filePath');
-    }
-
+  /// 上传 .mat 文件并解析（支持 Web 和原生）
+  /// - [bytes]: 文件字节（Web 用）
+  /// - [fileName]: 文件名
+  /// - [filePath]: 本地路径（原生用，可选）
+  Future<UploadResult> uploadMatFile({
+    String? filePath,
+    List<int>? bytes,
+    String? fileName,
+  }) async {
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('$baseUrl/api/upload'),
     );
-    request.files.add(
-      await http.MultipartFile.fromPath('file', filePath),
-    );
+
+    if (bytes != null) {
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: fileName ?? 'upload.mat',
+      ));
+    } else if (filePath != null) {
+      final file = File(filePath);
+      if (!file.existsSync()) {
+        throw Exception('文件不存在: $filePath');
+      }
+      request.files.add(
+        await http.MultipartFile.fromPath('file', filePath),
+      );
+    } else {
+      throw Exception('必须提供 bytes 或 filePath');
+    }
 
     final streamedResp =
         await request.send().timeout(const Duration(seconds: 30));

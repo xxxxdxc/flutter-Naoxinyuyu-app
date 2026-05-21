@@ -465,20 +465,25 @@ class _ControllerPageState extends State<ControllerPage> {
             const SizedBox(height: 16),
 
             // E-STOP Button
-            ElevatedButton.icon(
-              icon: const Icon(Icons.warning_amber_rounded),
-              label: const Text('紧急停止 (E-STOP)'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.error,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-              ),
-              onPressed: () {
-                context.read<GlobalAppState>().updateStimulation(
-                  StimulationState(status: StimStatus.off),
+            Consumer<GlobalAppState>(
+              builder: (context, state, _) {
+                final bool canEstop = state.isBleConnected;
+                return ElevatedButton.icon(
+                  icon: const Icon(Icons.warning_amber_rounded),
+                  label: const Text('紧急停止 (E-STOP)'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: canEstop ? AppTheme.error : Colors.grey[350],
+                    foregroundColor: canEstop ? Colors.white : Colors.grey[500],
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  ),
+                  onPressed: canEstop ? () {
+                    state.updateStimulation(
+                      StimulationState(status: StimStatus.off),
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已发送紧急停止指令')));
+                  } : null,
                 );
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已发送紧急停止指令')));
               },
             ),
           ],

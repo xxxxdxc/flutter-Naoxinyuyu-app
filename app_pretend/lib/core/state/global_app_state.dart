@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math' show Random;
 import 'package:flutter/material.dart';
 import '../services/data_replay_service.dart';
+import '../services/ble_service.dart';
+import '../services/ble_parser.dart';
 
 // 设备连接状态
 enum ConnectionStatus { disconnected, connecting, connected, error }
@@ -425,6 +427,81 @@ class GlobalAppState extends ChangeNotifier {
   // 存储最近的心率值用于计算平均心率
   final List<double> _recentHeartRates = [];
 
+  // ========== BLE 数据源 ==========
+  final BleService _bleService = BleService();
+  bool _useBleSource = false;
+  StreamSubscription<BlePacket>? _blePacketSub;
+  StreamSubscription<bool>? _bleConnSub;
+
+  // BLE 设备信息
+  bool get useBleSource => _useBleSource;
+  bool get isBleConnected => _bleService.isConnected;
+
+  // STR 引擎状态
+  int _engineState = 0;
+  int _calmDone = 0;
+  int _calmNeed = 7;
+  int _stressDone = 0;
+  int _stressNeed = 2;
+  double _emotionScore = 0.0;
+  double _emotionScoreRaw = 0.0;
+  bool _isStressed = false;
+  int _inferCount = 0;
+
+  int get engineState => _engineState;
+  int get calmDone => _calmDone;
+  int get calmNeed => _calmNeed;
+  int get stressDone => _stressDone;
+  int get stressNeed => _stressNeed;
+  double get emotionScore => _emotionScore;
+  double get emotionScoreRaw => _emotionScoreRaw;
+  bool get isStressed => _isStressed;
+  int get inferCount => _inferCount;
+
+  // HRV 就绪状态（来自 BLE 协议）
+  int _hrvRdy60 = 0;
+  int _hrvRdy300 = 0;
+  double? _lastHr;
+  double? _lastRmssd;
+  double? _lastPnn50;
+  double? _lastLf;
+  double? _lastHf;
+  double? _lastLfHf;
+
+  int get hrvRdy60 => _hrvRdy60;
+  int get hrvRdy300 => _hrvRdy300;
+  double? get lastHr => _lastHr;
+  double? get lastRmssd => _lastRmssd;
+  double? get lastPnn50 => _lastPnn50;
+  double? get lastLf => _lastLf;
+  double? get lastHf => _lastHf;
+  double? get lastLfHf => _lastLfHf;
+
+  // SYS 设备信息
+  int _batteryPct = 0;
+  double _battV = 0.0;
+  int _chargeState = 0;
+  int _deviceMode = 0;
+  double _sourceFs = 500;
+  double _processFs = 500;
+
+  int get batteryPct => _batteryPct;
+  double get battV => _battV;
+  int get chargeState => _chargeState;
+  int get deviceMode => _deviceMode;
+  double get sourceFs => _sourceFs;
+  double get processFs => _processFs;
+
+  // R 峰索引（用于波形标注）
+  List<int> _rPeakIndices = [];
+  List<int> get rPeakIndices => _rPeakIndices;
+
+  // CRC 统计
+  int _crcOk = 0;
+  int _crcBad = 0;
+  int get crcOk => _crcOk;
+  int get crcBad => _crcBad;
+
   /// 初始化数据回放
   void startDataReplay({String assetPath = 'assets/ecg_short_sample.json'}) async {
     // 设置连接状态
@@ -508,7 +585,195 @@ class GlobalAppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 获取瞬时心率（最近一次R波检测值）
+  // ========== BLE 连接管理 ==========
+
+  /// 启动 BLE 连接
+  Future<bool> startBleConnection() async {
+    if (_replayService.isPlaying) {
+      stopDataReplay();
+    }
+
+    _bleConnSub = _bleService.connectionStateStream.listen((connected) {
+      if (connected) {
+        hrvConnection = DeviceConnectionState(
+          status: ConnectionStatus.connected,
+          deviceId: 'HRV-BLE',
+          deviceName: 'KT6368A 胸带',
+          batteryLevel: _batteryPct,
+          connectedAt: DateTime.now(),
+        );
+      } else {
+        hrvConnection = DeviceConnectionState(
+          status: ConnectionStatus.disconnected,
+        );
+        _useBleSource = false;
+      }
+      notifyListeners();
+    });
+
+    try {
+      final ok = await _bleService.connect();
+
+      if (ok) {
+        _useBleSource = true;
+        _blePacketSub = _bleService.packetStream.listen(_onBlePacket);
+        ecgStream = ecgStream.copyWith(
+          status: StreamStatus.streaming,
+          sampleRate: 500,
+          waveform: [],
+        );
+        _totalEcgSamples = 0;
+        _recentHeartRates.clear();
+        _startBleBatchTimer();
+      }
+
+      notifyListeners();
+      return ok;
+    } catch (e) {
+      // 连接失败，清理已注册的订阅
+      await _bleConnSub?.cancel();
+      _bleConnSub = null;
+      hrvConnection = DeviceConnectionState(
+        status: ConnectionStatus.disconnected,
+      );
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// 断开 BLE 连接
+  Future<void> disconnectBle() async {
+    _batchFlushTimer?.cancel();
+    _batchFlushTimer = null;
+    await _blePacketSub?.cancel();
+    _blePacketSub = null;
+    await _bleConnSub?.cancel();
+    _bleConnSub = null;
+    await _bleService.disconnect();
+    _useBleSource = false;
+    hrvConnection = DeviceConnectionState(status: ConnectionStatus.disconnected);
+    ecgStream = ecgStream.copyWith(status: StreamStatus.idle, waveform: []);
+    notifyListeners();
+  }
+
+  /// 发送 BLE 控制命令
+  Future<void> sendBleCommand(String cmd) async {
+    await _bleService.sendCommand(cmd);
+  }
+
+  /// BLE 数据包处理
+  void _onBlePacket(BlePacket packet) {
+    // 1. SYS
+    _batteryPct = packet.battPct;
+    _battV = packet.battV;
+    _chargeState = packet.charge;
+    _deviceMode = packet.mode;
+    _sourceFs = packet.sourceFs;
+    _processFs = packet.processFs;
+    hrvConnection = hrvConnection.copyWith(batteryLevel: _batteryPct);
+
+    // 2. ECG 波形缓冲（_batchFlushTimer 批量刷新）
+    if (packet.ecgWaveform.isNotEmpty) {
+      _bleEcgBuffer.addAll(packet.ecgWaveform);
+      _totalEcgSamples += packet.ecgWaveform.length;
+    }
+
+    // 3. R 峰索引（存储为距波形末尾的负偏移，buffer 裁剪后仍有效）
+    if (packet.rPeakIndices.isNotEmpty && packet.ecgWaveform.isNotEmpty) {
+      final pktLen = packet.ecgWaveform.length;
+      _rPeakIndices = packet.rPeakIndices
+          .map((idx) => idx - pktLen)
+          .toList();
+    } else {
+      _rPeakIndices = [];
+    }
+
+    // 4. HRV（仅当此行存在时）
+    if (packet.hasHrv) {
+      _hrvRdy60 = packet.rdy60 ?? 0;
+      _hrvRdy300 = packet.rdy300 ?? 0;
+      _lastHr = packet.hr;
+      _lastRmssd = packet.rmssd;
+      _lastPnn50 = packet.pnn50;
+      _lastLf = packet.lf;
+      _lastHf = packet.hf;
+      _lastLfHf = packet.lfHf;
+
+      if (packet.hr != null) {
+        _recentHeartRates.add(packet.hr!);
+        if (_recentHeartRates.length > 50) {
+          _recentHeartRates.removeAt(0);
+        }
+      }
+
+      if (packet.rmssd != null) {
+        _updateMoodFromHrv(packet.rmssd!, packet.lfHf);
+      }
+    }
+
+    // 5. STR 引擎
+    _engineState = packet.strState;
+    _calmDone = packet.calmDone;
+    _calmNeed = packet.calmNeed;
+    _stressDone = packet.stressDone;
+    _stressNeed = packet.stressNeed;
+    _emotionScoreRaw = packet.scoreRaw;
+    _emotionScore = packet.scoreSmoothed;
+    _isStressed = packet.isStressed == 1;
+    _inferCount = packet.inferCount;
+
+    if (_engineState == 3) {
+      final moodValue = (_emotionScore * 100).clamp(0.0, 100.0);
+      updateMoodState(moodValue);
+    }
+
+    notifyListeners();
+  }
+
+  void _updateMoodFromHrv(double rmssd, double? lfHf) {
+    double moodValue;
+    if (rmssd < 20) {
+      moodValue = 25;
+    } else if (rmssd < 40) {
+      moodValue = 50;
+    } else if (rmssd < 60) {
+      moodValue = 70;
+    } else {
+      moodValue = 85;
+    }
+    if (lfHf != null && lfHf > 2.0) {
+      moodValue -= 15;
+    }
+    updateMoodState(moodValue.clamp(0.0, 100.0));
+  }
+
+  // BLE ECG 波形缓冲
+  final List<double> _bleEcgBuffer = [];
+
+  void _startBleBatchTimer() {
+    _batchFlushTimer?.cancel();
+    _batchFlushTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+      if (_bleEcgBuffer.isEmpty || !_useBleSource) return;
+
+      final newWave = List<double>.from(ecgStream.waveform)
+        ..addAll(_bleEcgBuffer);
+      _bleEcgBuffer.clear();
+
+      final maxSamples = (ecgStream.sampleRate * 10).toInt();
+      if (newWave.length > maxSamples) {
+        newWave.removeRange(0, newWave.length - maxSamples);
+      }
+      ecgStream = ecgStream.copyWith(
+        waveform: newWave,
+        duration: Duration(
+          milliseconds: (_totalEcgSamples * 1000 ~/ ecgStream.sampleRate),
+        ),
+      );
+      notifyListeners();
+    });
+  }
+
+  /// 获取瞬时心率（最近一次值）
   double? get currentHeartRate {
     if (_recentHeartRates.isEmpty) return null;
     return _recentHeartRates.last;
@@ -526,6 +791,9 @@ class GlobalAppState extends ChangeNotifier {
     _batchFlushTimer?.cancel();
     _ecgSub?.cancel();
     _hrSub?.cancel();
+    _blePacketSub?.cancel();
+    _bleConnSub?.cancel();
+    _bleService.dispose();
     super.dispose();
   }
 

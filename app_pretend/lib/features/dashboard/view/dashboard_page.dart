@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/state/global_app_state.dart';
+import '../../../core/services/ble_service.dart';
 import '../../../core/theme/app_theme.dart';
 
 class DashboardPage extends StatelessWidget {
@@ -27,79 +28,165 @@ class DashboardPage extends StatelessWidget {
             const SizedBox(height: 16),
             const _HeartRateCard(),
             const SizedBox(height: 16),
-            const _MoodBarometerCard(),
+            Consumer<GlobalAppState>(
+              builder: (context, state, _) {
+                if (!state.useBleSource && !state.isReplaying) {
+                  return const SizedBox.shrink();
+                }
+                return Column(
+                  children: [
+                    const _MoodBarometerCard(),
+                    const SizedBox(height: 16),
+                  ],
+                );
+              },
+            ),
+            const _EngineStateCard(),
             const SizedBox(height: 16),
             const _MetricsGrid(),
-            const SizedBox(height: 80), // 为 FAB 留空间
+            const SizedBox(height: 80),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showBluetoothScanner(context),
+        onPressed: () => _showDevicePanel(context),
         backgroundColor: AppTheme.primaryLight.withAlpha((0.2 * 255).toInt()),
         elevation: 0,
-        child: const Icon(Icons.bluetooth, color: AppTheme.primaryDark),
+        child: Consumer<GlobalAppState>(
+          builder: (context, state, _) => Icon(
+            state.isBleConnected
+                ? Icons.bluetooth_connected
+                : Icons.bluetooth,
+            color: state.isBleConnected
+                ? Colors.green
+                : AppTheme.primaryDark,
+          ),
+        ),
       ),
     );
   }
 
-  void _showBluetoothScanner(BuildContext context) {
+  void _showDevicePanel(BuildContext context) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Consumer<GlobalAppState>(
-          builder: (context, state, child) {
-            return Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('发现设备', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    leading: const Icon(Icons.psychology, color: AppTheme.deviceDbs),
-                    title: const Text('DBS 设备 (DBS-001)'),
-                    subtitle: Text(state.dbsConnection.status == ConnectionStatus.connected ? '已连接' : '未连接'),
-                    trailing: ElevatedButton(
-                      onPressed: () {
-                        if (state.dbsConnection.status == ConnectionStatus.connected) {
-                          state.stopDataReplay();
-                        } else {
-                          state.startDataReplay();
-                        }
-                        Navigator.pop(context);
-                      },
-                      child: Text(state.dbsConnection.status == ConnectionStatus.connected ? '断开' : '连接'),
-                    ),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.watch, color: AppTheme.deviceHrv),
-                    title: const Text('HRV 手环 (HRV-001)'),
-                    subtitle: Text(state.hrvConnection.status == ConnectionStatus.connected ? '已连接' : '未连接'),
-                    trailing: ElevatedButton(
-                      onPressed: () {
-                        if (state.hrvConnection.status == ConnectionStatus.connected) {
-                          state.stopDataReplay();
-                        } else {
-                          state.startDataReplay();
-                        }
-                        Navigator.pop(context);
-                      },
-                      child: Text(state.hrvConnection.status == ConnectionStatus.connected ? '断开' : '连接'),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
+        return _DevicePanelContent();
+      },
+    );
+  }
+}
+
+/// 设备管理面板内容（带连接状态反馈）
+class _DevicePanelContent extends StatefulWidget {
+  @override
+  State<_DevicePanelContent> createState() => _DevicePanelContentState();
+}
+
+class _DevicePanelContentState extends State<_DevicePanelContent> {
+  bool _isConnecting = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<GlobalAppState>(
+      builder: (context, state, child) {
+        // 同步本地连接中状态与全局状态
+        if (!_isConnecting && state.isBleConnected) {
+          // 已连接，正常显示
+        }
+
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('设备管理', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              // HRV 胸带
+              ListTile(
+                leading: const Icon(Icons.watch, color: AppTheme.deviceHrv),
+                title: const Text('KT6368A 胸带 (BLE)'),
+                subtitle: Text(_getHrvSubtitle(state)),
+                trailing: _buildHrvTrailing(state),
               ),
-            );
-          },
+              const Divider(),
+              // DBS 设备（预留）
+              ListTile(
+                leading: Icon(Icons.psychology, color: Colors.grey[400]),
+                title: Text('DBS 设备', style: TextStyle(color: Colors.grey[400])),
+                subtitle: Text('预留', style: TextStyle(color: Colors.grey[500])),
+                trailing: ElevatedButton(
+                  onPressed: null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey[300],
+                    foregroundColor: Colors.grey[500],
+                  ),
+                  child: const Text('连接'),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         );
       },
     );
+  }
+
+  String _getHrvSubtitle(GlobalAppState state) {
+    if (_isConnecting) return '连接中...';
+    if (state.isBleConnected) return '已连接 (电量 ${state.batteryPct}%)';
+    return '未连接';
+  }
+
+  Widget _buildHrvTrailing(GlobalAppState state) {
+    if (_isConnecting) {
+      return const SizedBox(
+        width: 24, height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+    return ElevatedButton(
+      onPressed: () => _handleHrvToggle(state),
+      child: Text(state.isBleConnected ? '断开' : '连接'),
+    );
+  }
+
+  Future<void> _handleHrvToggle(GlobalAppState state) async {
+    if (state.isBleConnected) {
+      await state.disconnectBle();
+      return;
+    }
+
+    setState(() => _isConnecting = true);
+
+    try {
+      final ok = await state.startBleConnection();
+      if (mounted) {
+        setState(() => _isConnecting = false);
+        if (!ok) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('连接失败：设备不支持数据通知')),
+          );
+        }
+      }
+    } on BleConnectException catch (e) {
+      if (mounted) {
+        setState(() => _isConnecting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isConnecting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('连接异常: $e')),
+        );
+      }
+    }
   }
 }
 
@@ -114,21 +201,21 @@ class _DeviceCardsRow extends StatelessWidget {
           children: [
             Expanded(
               child: _DeviceCard(
-                title: 'DBS 设备',
-                icon: Icons.psychology,
-                color: AppTheme.primaryMain,
-                isConnected: state.dbsConnection.status == ConnectionStatus.connected,
-                battery: state.dbsConnection.batteryLevel ?? 0,
+                title: 'HRV 胸带',
+                icon: Icons.watch,
+                color: AppTheme.deviceHrv,
+                isConnected: state.hrvConnection.status == ConnectionStatus.connected,
+                battery: state.hrvConnection.batteryLevel ?? 0,
               ),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: _DeviceCard(
-                title: 'HRV 手环',
-                icon: Icons.watch,
-                color: AppTheme.deviceHrv,
-                isConnected: state.hrvConnection.status == ConnectionStatus.connected,
-                battery: state.hrvConnection.batteryLevel ?? 0,
+                title: 'DBS 设备',
+                icon: Icons.psychology,
+                color: Colors.grey,
+                isConnected: false,
+                battery: 0,
               ),
             ),
           ],
@@ -287,34 +374,218 @@ class _MetricsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.6,
-      children: [
-        _MetricItem(
-          title: 'HRV (RMSSD)',
-          value: '45',
-          unit: 'ms',
-          icon: Icons.favorite_border,
-        ),
-        _MetricItem(
-          title: '系统功耗',
-          value: '1.2',
-          unit: 'mW',
-          icon: Icons.bolt,
-        ),
-        const _ModeCard(),
-        _MetricItem(
-          title: '上次刺激',
-          value: '10',
-          unit: '分钟前',
-          icon: Icons.history,
-        ),
-      ],
+    return Consumer<GlobalAppState>(
+      builder: (context, state, child) {
+        return GridView.count(
+          crossAxisCount: 2,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: 1.6,
+          children: [
+            _MetricItem(
+              title: 'HRV (RMSSD)',
+              value: state.lastRmssd != null
+                  ? state.lastRmssd!.toStringAsFixed(1)
+                  : (state.useBleSource ? '蓄积中' : '--'),
+              unit: state.lastRmssd != null ? 'ms' : '',
+              icon: Icons.favorite_border,
+            ),
+            _MetricItem(
+              title: '心率',
+              value: state.currentHeartRate != null
+                  ? state.currentHeartRate!.toStringAsFixed(1)
+                  : '--',
+              unit: state.currentHeartRate != null ? 'BPM' : '',
+              icon: Icons.monitor_heart_outlined,
+            ),
+            const _ModeCard(),
+            _MetricItem(
+              title: 'LF/HF',
+              value: state.lastLfHf != null
+                  ? state.lastLfHf!.toStringAsFixed(2)
+                  : (state.useBleSource ? '蓄积中' : '--'),
+              unit: '',
+              icon: Icons.show_chart,
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _EngineStateCard extends StatelessWidget {
+  const _EngineStateCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<GlobalAppState>(
+      builder: (context, state, child) {
+        if (!state.useBleSource && !state.isReplaying) {
+          return const SizedBox.shrink();
+        }
+
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+                color: AppTheme.divider.withAlpha((0.3 * 255).toInt())),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.psychology, size: 20, color: AppTheme.brandPurple),
+                    const SizedBox(width: 8),
+                    Text('情绪引擎',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            )),
+                    const Spacer(),
+                    if (state.useBleSource)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withAlpha(25),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text('BLE',
+                            style:
+                                TextStyle(fontSize: 11, color: Colors.green)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildEngineContent(context, state),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEngineContent(BuildContext context, GlobalAppState state) {
+    switch (state.engineState) {
+      case 0:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _statusChip('未校准', Colors.grey),
+            const SizedBox(height: 12),
+            if (state.useBleSource)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => state.sendBleCommand('CMD:C\n'),
+                  icon: const Icon(Icons.track_changes, size: 18),
+                  label: const Text('开始基线校准'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.brandPurple,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+          ],
+        );
+      case 1:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _statusChip('基线校准中', Colors.orange),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: state.calmNeed > 0
+                  ? state.calmDone / state.calmNeed
+                  : 0,
+            ),
+            const SizedBox(height: 4),
+            Text('${state.calmDone} / ${state.calmNeed}',
+                style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 8),
+            if (state.useBleSource)
+              TextButton.icon(
+                onPressed: () => state.sendBleCommand('CMD:X\n'),
+                icon: const Icon(Icons.cancel, size: 16, color: Colors.red),
+                label: const Text('取消校准',
+                    style: TextStyle(color: Colors.red)),
+              ),
+          ],
+        );
+      case 2:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _statusChip('应激诱导中', Colors.red),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: state.stressNeed > 0
+                  ? state.stressDone / state.stressNeed
+                  : 0,
+              color: Colors.red,
+            ),
+            const SizedBox(height: 4),
+            Text('${state.stressDone} / ${state.stressNeed}',
+                style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 8),
+            if (state.useBleSource)
+              TextButton.icon(
+                onPressed: () => state.sendBleCommand('CMD:X\n'),
+                icon: const Icon(Icons.cancel, size: 16, color: Colors.red),
+                label: const Text('取消校准',
+                    style: TextStyle(color: Colors.red)),
+              ),
+          ],
+        );
+      case 3:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _statusChip(
+                    state.isStressed ? '应激' : '平静',
+                    state.isStressed ? Colors.red : Colors.green),
+                const SizedBox(width: 8),
+                Text('推理 #${state.inferCount}',
+                    style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              (state.emotionScore * 100).toStringAsFixed(0),
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: state.isStressed
+                        ? Colors.red
+                        : AppTheme.brandPurple,
+                  ),
+            ),
+            Text('情绪得分',
+                style: Theme.of(context).textTheme.bodySmall),
+          ],
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _statusChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withAlpha(25),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withAlpha(60)),
+      ),
+      child: Text(label,
+          style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600)),
     );
   }
 }

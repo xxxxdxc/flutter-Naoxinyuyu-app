@@ -92,6 +92,7 @@ class _VisualizerPageState extends State<VisualizerPage>
                   data: state.ecgStream.waveform,
                   timeScale: _timeScale,
                   isPaused: _isPaused,
+                  rPeakIndices: state.useBleSource ? state.rPeakIndices : null,
                 ),
               ),
               _buildControlOverlay(),
@@ -155,6 +156,7 @@ class _WaveformCanvas extends StatelessWidget {
   final List<double> data;
   final double timeScale;
   final bool isPaused;
+  final List<int>? rPeakIndices;
 
   const _WaveformCanvas({
     required this.title,
@@ -163,6 +165,7 @@ class _WaveformCanvas extends StatelessWidget {
     required this.data,
     required this.timeScale,
     required this.isPaused,
+    this.rPeakIndices,
   });
 
   @override
@@ -180,6 +183,7 @@ class _WaveformCanvas extends StatelessWidget {
             color: color,
             timeScale: timeScale,
             sampleRate: sampleRate,
+            rPeakOffsets: rPeakIndices,
           ),
         ),
         Positioned(
@@ -224,12 +228,14 @@ class _WaveformPainter extends CustomPainter {
   final Color color;
   final double timeScale;
   final int sampleRate;
+  final List<int>? rPeakOffsets;
 
   _WaveformPainter({
     required this.data,
     required this.color,
     required this.timeScale,
     required this.sampleRate,
+    this.rPeakOffsets,
   });
 
   @override
@@ -267,8 +273,30 @@ class _WaveformPainter extends CustomPainter {
     }
 
     canvas.drawPath(path, paint);
+
+    // 绘制 R 峰标记
+    if (rPeakOffsets != null && rPeakOffsets!.isNotEmpty) {
+      final rDotPaint = Paint()
+        ..color = Colors.red
+        ..style = PaintingStyle.fill;
+      final rLinePaint = Paint()
+        ..color = Colors.red.withAlpha(80)
+        ..strokeWidth = 0.5;
+
+      for (final offset in rPeakOffsets!) {
+        final globalIdx = data.length + offset; // offset 为负
+        if (globalIdx < startIdx || globalIdx >= data.length) continue;
+
+        final localIdx = globalIdx - startIdx;
+        final x = localIdx * xStep;
+        final y = midY - (data[globalIdx] * yScale);
+
+        canvas.drawLine(Offset(x, 0), Offset(x, size.height), rLinePaint);
+        canvas.drawCircle(Offset(x, y), 3.0, rDotPaint);
+      }
+    }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true; // 实时重绘
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
