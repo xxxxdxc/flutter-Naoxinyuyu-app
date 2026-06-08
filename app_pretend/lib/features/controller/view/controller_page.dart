@@ -23,9 +23,9 @@ class _ControllerPageState extends State<ControllerPage> {
   bool _isManualMode = false; // 初始设为false，直到获取到真实模式
 
   // 安全上限状态变量
-  double _maxIntensity = 10.0;      // 最大强度上限
-  double _maxFrequency = 150.0;     // 最大频率上限
-  double _maxPulseWidth = 500.0;    // 最大脉宽上限
+  double _maxIntensity = 10.0; // 最大强度上限
+  double _maxFrequency = 150.0; // 最大频率上限
+  double _maxPulseWidth = 500.0; // 最大脉宽上限
 
   @override
   void initState() {
@@ -98,7 +98,9 @@ class _ControllerPageState extends State<ControllerPage> {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: modeDesc.color.withAlpha(76)), // 0.3 opacity
+            side: BorderSide(
+              color: modeDesc.color.withAlpha(76),
+            ), // 0.3 opacity
           ),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
@@ -110,11 +112,17 @@ class _ControllerPageState extends State<ControllerPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('当前模式: ${modeDesc.name}',
-                        style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        '当前模式: ${modeDesc.name}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                       const SizedBox(height: 4),
-                      Text(_isManualMode ? '手动控制 - 所有参数可编辑' : '自动模式 - 参数由算法控制，可设置安全上限',
-                        style: Theme.of(context).textTheme.bodySmall),
+                      Text(
+                        _isManualMode
+                            ? '手动控制 - 所有参数可编辑'
+                            : '自动模式 - 参数由算法控制，可设置安全上限',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ],
                   ),
                 ),
@@ -148,8 +156,10 @@ class _ControllerPageState extends State<ControllerPage> {
               ],
             ),
             const SizedBox(height: 8),
-            Text('当前为自动模式，算法控制实时参数。您可以设置参数安全上限:',
-              style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              '当前为自动模式，算法控制实时参数。您可以设置参数安全上限:',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             const Divider(height: 32),
 
             // 最大强度设置
@@ -157,8 +167,13 @@ class _ControllerPageState extends State<ControllerPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('最大强度'),
-                Text('${_maxIntensity.toStringAsFixed(1)} mA',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(
+                  '${_maxIntensity.toStringAsFixed(1)} mA',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -181,8 +196,13 @@ class _ControllerPageState extends State<ControllerPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('最大频率'),
-                Text('${_maxFrequency.toStringAsFixed(1)} Hz',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(
+                  '${_maxFrequency.toStringAsFixed(1)} Hz',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -205,8 +225,13 @@ class _ControllerPageState extends State<ControllerPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('最大脉宽'),
-                Text('${_maxPulseWidth.toStringAsFixed(0)} μs',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(
+                  '${_maxPulseWidth.toStringAsFixed(0)} μs',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -232,11 +257,16 @@ class _ControllerPageState extends State<ControllerPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('确认同步参数'),
-        content: Text('将下发新参数:\n强度: $_intensity mA\n频率: $_frequency Hz\n脉宽: $_pulseWidth μs\n\n确定执行吗？'),
+        content: Text(
+          '将下发新参数:\n强度: $_intensity mA\n频率: $_frequency Hz\n脉宽: $_pulseWidth μs\n\n确定执行吗？',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('取消', style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text(
+              '取消',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
@@ -251,7 +281,9 @@ class _ControllerPageState extends State<ControllerPage> {
                 ),
               );
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('参数下发成功')));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('参数下发成功')));
               setState(() {
                 _isDirty = false;
                 _isLocked = true;
@@ -285,23 +317,43 @@ class _ControllerPageState extends State<ControllerPage> {
     }
 
     // 计算安全频率值
-    final safeFrequency = _frequency.clamp(0.0, _isManualMode ? 150.0 : _maxFrequency);
+    final safeFrequency = _frequency.clamp(
+      0.0,
+      _isManualMode ? 150.0 : _maxFrequency,
+    );
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('参数控制', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          '参数控制',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           TextButton.icon(
-            icon: Icon(_isLocked ? Icons.lock : Icons.lock_open,
-              color: _isManualMode ? (_isLocked ? AppTheme.textSecondary : AppTheme.primaryMain) : AppTheme.textSecondary),
-            label: Text(_isManualMode ? (_isLocked ? '解锁编辑' : '已解锁') : '自动模式锁定',
-              style: TextStyle(color: _isManualMode ? (_isLocked ? AppTheme.textSecondary : AppTheme.primaryMain) : AppTheme.textSecondary)),
-            onPressed: _isManualMode ? () {
-              setState(() {
-                _isLocked = !_isLocked;
-              });
-            } : null,
-          )
+            icon: Icon(
+              _isLocked ? Icons.lock : Icons.lock_open,
+              color: _isManualMode
+                  ? (_isLocked ? AppTheme.textSecondary : AppTheme.primaryMain)
+                  : AppTheme.textSecondary,
+            ),
+            label: Text(
+              _isManualMode ? (_isLocked ? '解锁编辑' : '已解锁') : '自动模式锁定',
+              style: TextStyle(
+                color: _isManualMode
+                    ? (_isLocked
+                          ? AppTheme.textSecondary
+                          : AppTheme.primaryMain)
+                    : AppTheme.textSecondary,
+              ),
+            ),
+            onPressed: _isManualMode
+                ? () {
+                    setState(() {
+                      _isLocked = !_isLocked;
+                    });
+                  }
+                : null,
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -315,7 +367,9 @@ class _ControllerPageState extends State<ControllerPage> {
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: AppTheme.divider.withAlpha((0.3 * 255).toInt())),
+                side: BorderSide(
+                  color: AppTheme.divider.withAlpha((0.3 * 255).toInt()),
+                ),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -324,7 +378,7 @@ class _ControllerPageState extends State<ControllerPage> {
                   children: [
                     Text('刺激参数', style: Theme.of(context).textTheme.titleLarge),
                     const Divider(height: 32),
-                    
+
                     // Intensity
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -333,10 +387,22 @@ class _ControllerPageState extends State<ControllerPage> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text('${_intensity.toStringAsFixed(1)} mA',
-                              style: TextStyle(fontSize: 20, color: _isDirty ? AppTheme.primaryMain : AppTheme.textPrimary, fontWeight: FontWeight.bold)),
+                            Text(
+                              '${_intensity.toStringAsFixed(1)} mA',
+                              style: TextStyle(
+                                fontSize: 20,
+                                color: _isDirty
+                                    ? AppTheme.primaryMain
+                                    : AppTheme.textPrimary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             if (!_isManualMode)
-                              Text('算法实时控制', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppTheme.textSecondary)),
+                              Text(
+                                '算法实时控制',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(color: AppTheme.textSecondary),
+                              ),
                           ],
                         ),
                       ],
@@ -348,16 +414,30 @@ class _ControllerPageState extends State<ControllerPage> {
                       max: _isManualMode ? 10.0 : _maxIntensity, // 动态最大值
                       divisions: 100,
                       label: _intensity.toStringAsFixed(1),
-                      onChanged: _isManualMode && !_isLocked ? (val) {
-                        setState(() => _intensity = val);
-                        _markDirty();
-                      } : null,
+                      onChanged: _isManualMode && !_isLocked
+                          ? (val) {
+                              setState(() => _intensity = val);
+                              _markDirty();
+                            }
+                          : null,
                     ),
                     const Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('0 mA', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                        Text('10.0 mA', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                        Text(
+                          '0 mA',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          '10.0 mA',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 24),
@@ -377,7 +457,9 @@ class _ControllerPageState extends State<ControllerPage> {
                           isExpanded: true,
                           underline: const SizedBox(), // 移除默认下划线
                           items: () {
-                            final maxFreq = _isManualMode ? 150.0 : _maxFrequency;
+                            final maxFreq = _isManualMode
+                                ? 150.0
+                                : _maxFrequency;
                             // 使用安全频率值，确保不超过上限
                             final currentFreq = safeFrequency;
 
@@ -405,16 +487,20 @@ class _ControllerPageState extends State<ControllerPage> {
                             return options.map((f) {
                               return DropdownMenuItem<double>(
                                 value: f,
-                                child: Text('$f Hz ${f == 130.0 ? '(Default)' : ''}'),
+                                child: Text(
+                                  '$f Hz ${f == 130.0 ? '(Default)' : ''}',
+                                ),
                               );
                             }).toList();
                           }(),
-                          onChanged: _isManualMode && !_isLocked ? (val) {
-                            if (val != null) {
-                              setState(() => _frequency = val);
-                              _markDirty();
-                            }
-                          } : null,
+                          onChanged: _isManualMode && !_isLocked
+                              ? (val) {
+                                  if (val != null) {
+                                    setState(() => _frequency = val);
+                                    _markDirty();
+                                  }
+                                }
+                              : null,
                         ),
                       ),
                     ),
@@ -428,17 +514,29 @@ class _ControllerPageState extends State<ControllerPage> {
                       enabled: _isManualMode && !_isLocked,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
                         hintText: _isManualMode ? '' : '算法控制',
                       ),
-                      onChanged: _isManualMode && !_isLocked ? (val) {
-                        final parsed = double.tryParse(val);
-                        if (parsed != null) {
-                          setState(() => _pulseWidth = parsed.clamp(0.0, _isManualMode ? 500.0 : _maxPulseWidth));
-                          _markDirty();
-                        }
-                      } : null,
+                      onChanged: _isManualMode && !_isLocked
+                          ? (val) {
+                              final parsed = double.tryParse(val);
+                              if (parsed != null) {
+                                setState(
+                                  () => _pulseWidth = parsed.clamp(
+                                    0.0,
+                                    _isManualMode ? 500.0 : _maxPulseWidth,
+                                  ),
+                                );
+                                _markDirty();
+                              }
+                            }
+                          : null,
                     ),
                   ],
                 ),
@@ -455,12 +553,20 @@ class _ControllerPageState extends State<ControllerPage> {
               icon: const Icon(Icons.sync),
               label: const Text('同步至设备'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _isDirty && _isManualMode ? AppTheme.primaryMain : AppTheme.divider.withAlpha((0.5 * 255).toInt()),
-                foregroundColor: _isDirty && _isManualMode ? Colors.white : AppTheme.textSecondary,
+                backgroundColor: _isDirty && _isManualMode
+                    ? AppTheme.primaryMain
+                    : AppTheme.divider.withAlpha((0.5 * 255).toInt()),
+                foregroundColor: _isDirty && _isManualMode
+                    ? Colors.white
+                    : AppTheme.textSecondary,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
               ),
-              onPressed: _isManualMode && _isDirty && !_isLocked ? () => _syncParams(context) : null,
+              onPressed: _isManualMode && _isDirty && !_isLocked
+                  ? () => _syncParams(context)
+                  : null,
             ),
             const SizedBox(height: 16),
 
@@ -472,17 +578,25 @@ class _ControllerPageState extends State<ControllerPage> {
                   icon: const Icon(Icons.warning_amber_rounded),
                   label: const Text('紧急停止 (E-STOP)'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: canEstop ? AppTheme.error : Colors.grey[350],
+                    backgroundColor: canEstop
+                        ? AppTheme.error
+                        : Colors.grey[350],
                     foregroundColor: canEstop ? Colors.white : Colors.grey[500],
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
                   ),
-                  onPressed: canEstop ? () {
-                    state.updateStimulation(
-                      StimulationState(status: StimStatus.off),
-                    );
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已发送紧急停止指令')));
-                  } : null,
+                  onPressed: canEstop
+                      ? () {
+                          state.updateStimulation(
+                            StimulationState(status: StimStatus.off),
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('已发送紧急停止指令')),
+                          );
+                        }
+                      : null,
                 );
               },
             ),

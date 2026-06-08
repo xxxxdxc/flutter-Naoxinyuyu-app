@@ -57,7 +57,9 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppTheme.divider.withAlpha((0.3 * 255).toInt())),
+        side: BorderSide(
+          color: AppTheme.divider.withAlpha((0.3 * 255).toInt()),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -113,7 +115,10 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
                 valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryMain),
               ),
               const SizedBox(height: 16),
-              Text('正在生成分析报告...', style: TextStyle(color: AppTheme.textSecondary)),
+              Text(
+                '正在生成分析报告...',
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
             ],
           ),
         ),
@@ -127,7 +132,9 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppTheme.divider.withAlpha((0.3 * 255).toInt())),
+        side: BorderSide(
+          color: AppTheme.divider.withAlpha((0.3 * 255).toInt()),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(40.0),
@@ -199,7 +206,9 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppTheme.divider.withAlpha((0.3 * 255).toInt())),
+        side: BorderSide(
+          color: AppTheme.divider.withAlpha((0.3 * 255).toInt()),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -216,7 +225,9 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
                   CircularProgressIndicator(
                     value: healthScore / 100,
                     strokeWidth: 12,
-                    backgroundColor: AppTheme.primaryMain.withAlpha((0.1 * 255).toInt()),
+                    backgroundColor: AppTheme.primaryMain.withAlpha(
+                      (0.1 * 255).toInt(),
+                    ),
                     valueColor: AlwaysStoppedAnimation<Color>(statusColor),
                   ),
                   Center(
@@ -225,11 +236,12 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
                       children: [
                         Text(
                           healthScore.toStringAsFixed(0),
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontSize: 48,
-                            color: statusColor,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                fontSize: 48,
+                                color: statusColor,
+                                fontWeight: FontWeight.bold,
+                              ),
                         ),
                         Text(
                           statusText,
@@ -283,7 +295,9 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
           unit: '点',
           icon: Icons.heart_broken,
           status: analysis.hrvStressIndex < 50 ? '放松' : '压力',
-          statusColor: analysis.hrvStressIndex < 50 ? AppTheme.success : AppTheme.warning,
+          statusColor: analysis.hrvStressIndex < 50
+              ? AppTheme.success
+              : AppTheme.warning,
         ),
         _buildMetricItem(
           context,
@@ -300,7 +314,8 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
           value: _formatDuration(analysis.totalStimulationTime),
           unit: '',
           icon: Icons.timer,
-          subtitle: '占监测时间${(analysis.totalStimulationTime.inHours / 24 * 100).toStringAsFixed(0)}%',
+          subtitle:
+              '占监测时间${(analysis.totalStimulationTime.inHours / 24 * 100).toStringAsFixed(0)}%',
         ),
       ],
     );
@@ -322,7 +337,9 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppTheme.divider.withAlpha((0.3 * 255).toInt())),
+        side: BorderSide(
+          color: AppTheme.divider.withAlpha((0.3 * 255).toInt()),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -337,19 +354,28 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
                 Text(title, style: Theme.of(context).textTheme.labelSmall),
                 if (trend != null) ...[
                   const SizedBox(width: 4),
-                  Text(trend, style: TextStyle(
-                    color: trend == '↑' ? AppTheme.success : AppTheme.error,
-                    fontSize: 12,
-                  )),
+                  Text(
+                    trend,
+                    style: TextStyle(
+                      color: trend == '↑' ? AppTheme.success : AppTheme.error,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
                 if (status != null) ...[
                   const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: statusColor?.withAlpha((0.1 * 255).toInt()),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: statusColor ?? Colors.transparent, width: 1),
+                      border: Border.all(
+                        color: statusColor ?? Colors.transparent,
+                        width: 1,
+                      ),
                     ),
                     child: Text(
                       status,
@@ -372,7 +398,9 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
                   value,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: isHighlight ? AppTheme.primaryMain : AppTheme.textPrimary,
+                    color: isHighlight
+                        ? AppTheme.primaryMain
+                        : AppTheme.textPrimary,
                   ),
                 ),
                 if (unit.isNotEmpty) ...[
@@ -385,9 +413,9 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(color: AppTheme.textSecondary),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -398,12 +426,17 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
     );
   }
 
-  Widget _buildAiInterpretationCard(BuildContext context, AiInterpretation? aiInterpretation) {
+  Widget _buildAiInterpretationCard(
+    BuildContext context,
+    AiInterpretation? aiInterpretation,
+  ) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppTheme.primaryMain.withAlpha((0.3 * 255).toInt())),
+        side: BorderSide(
+          color: AppTheme.primaryMain.withAlpha((0.3 * 255).toInt()),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -418,12 +451,20 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
                     color: AppTheme.primaryMain.withAlpha((0.1 * 255).toInt()),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.psychology, color: AppTheme.primaryMain, size: 20),
+                  child: Icon(
+                    Icons.psychology,
+                    color: AppTheme.primaryMain,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Text('AI智能解读', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(width: 8),
-                const Icon(Icons.auto_awesome, size: 16, color: AppTheme.primaryMain),
+                const Icon(
+                  Icons.auto_awesome,
+                  size: 16,
+                  color: AppTheme.primaryMain,
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -444,45 +485,67 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
 
               // 发现部分
               if (aiInterpretation.findings.isNotEmpty) ...[
-                Text('发现:', style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w500,
-                )),
-                const SizedBox(height: 8),
-                ...aiInterpretation.findings.map((finding) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4.0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('• ', style: TextStyle(color: AppTheme.textSecondary)),
-                      Expanded(
-                        child: Text(finding, style: TextStyle(color: AppTheme.textSecondary)),
-                      ),
-                    ],
+                Text(
+                  '发现:',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w500,
                   ),
-                )),
+                ),
+                const SizedBox(height: 8),
+                ...aiInterpretation.findings.map(
+                  (finding) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '• ',
+                          style: TextStyle(color: AppTheme.textSecondary),
+                        ),
+                        Expanded(
+                          child: Text(
+                            finding,
+                            style: TextStyle(color: AppTheme.textSecondary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 16),
               ],
 
               // 建议部分
               if (aiInterpretation.recommendations.isNotEmpty) ...[
-                Text('建议:', style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w500,
-                )),
-                const SizedBox(height: 8),
-                ...aiInterpretation.recommendations.map((recommendation) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4.0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('• ', style: TextStyle(color: AppTheme.primaryMain)),
-                      Expanded(
-                        child: Text(recommendation, style: TextStyle(color: AppTheme.textPrimary)),
-                      ),
-                    ],
+                Text(
+                  '建议:',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w500,
                   ),
-                )),
+                ),
+                const SizedBox(height: 8),
+                ...aiInterpretation.recommendations.map(
+                  (recommendation) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '• ',
+                          style: TextStyle(color: AppTheme.primaryMain),
+                        ),
+                        Expanded(
+                          child: Text(
+                            recommendation,
+                            style: TextStyle(color: AppTheme.textPrimary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
 
               const SizedBox(height: 16),
@@ -501,17 +564,25 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
                 child: Column(
                   children: [
                     CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryMain),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppTheme.primaryMain,
+                      ),
                     ),
                     const SizedBox(height: 16),
-                    Text('AI正在生成报告中...', style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.w500,
-                    )),
+                    Text(
+                      'AI正在生成报告中...',
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       '请稍候，AI正在分析您的生理数据',
-                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 14,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -529,7 +600,9 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppTheme.divider.withAlpha((0.3 * 255).toInt())),
+        side: BorderSide(
+          color: AppTheme.divider.withAlpha((0.3 * 255).toInt()),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -550,7 +623,9 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
               child: Container(
                 constraints: const BoxConstraints(minHeight: 200),
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppTheme.divider.withAlpha((0.5 * 255).toInt())),
+                  border: Border.all(
+                    color: AppTheme.divider.withAlpha((0.5 * 255).toInt()),
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: LayoutBuilder(
@@ -589,7 +664,11 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
             const SizedBox(height: 8),
             Text(
               '提示: 图表已优化显示，自动调整数据点密度确保清晰可读',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontStyle: FontStyle.italic),
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+              ),
             ),
           ],
         ),
@@ -603,13 +682,13 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
         Container(
           width: 12,
           height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        Text(
+          label,
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+        ),
       ],
     );
   }
@@ -623,13 +702,13 @@ class _AnalysisReportPageState extends State<AnalysisReportPage> {
       final days = duration.inHours ~/ 24;
       final hours = duration.inHours % 24;
       if (hours > 0) {
-        return '${days}天${hours}小时';
+        return '$days天$hours小时';
       }
-      return '${days}天';
+      return '$days天';
     } else if (duration.inHours > 0) {
       final minutes = duration.inMinutes % 60;
       if (minutes > 0) {
-        return '${duration.inHours}小时${minutes}分钟';
+        return '${duration.inHours}小时$minutes分钟';
       }
       return '${duration.inHours}小时';
     } else if (duration.inMinutes > 0) {

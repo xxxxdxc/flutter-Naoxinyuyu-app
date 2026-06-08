@@ -42,7 +42,9 @@ class DataReplayService {
 
   /// 启动回放
   /// [assetPath] JSON 数据文件路径，如 'assets/ecg_sample.json'
-  Future<void> start({String assetPath = 'assets/ecg_short_sample.json'}) async {
+  Future<void> start({
+    String assetPath = 'assets/ecg_short_sample.json',
+  }) async {
     await stop();
 
     // 加载 JSON 数据
@@ -106,7 +108,8 @@ class DataReplayService {
 
     // 检查是否超过阈值且在不应期外
     if (value > effectiveThreshold &&
-        (_lastRPeakIndex < 0 || (_currentIndex - _lastRPeakIndex) > _refractoryPeriod)) {
+        (_lastRPeakIndex < 0 ||
+            (_currentIndex - _lastRPeakIndex) > _refractoryPeriod)) {
       // 确认是局部最大值（检查前后3个点）
       final startIdx = max(0, _currentIndex - 3);
       final endIdx = min(_data!.length - 1, _currentIndex + 3);
@@ -120,7 +123,8 @@ class DataReplayService {
 
       if (isLocalMax) {
         if (_lastRPeakIndex > 0) {
-          final rrInterval = (_currentIndex - _lastRPeakIndex) * 1000 ~/ _sampleRate;
+          final rrInterval =
+              (_currentIndex - _lastRPeakIndex) * 1000 ~/ _sampleRate;
           _recentRR.add(rrInterval.toDouble());
           if (_recentRR.length > 5) {
             _recentRR.removeAt(0);

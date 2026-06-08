@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/state/global_app_state.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auth/view/login_page.dart';
 import 'main_home_page.dart';
 
 void main() {
   runApp(
     MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => GlobalAppState()),
-      ],
+      providers: [ChangeNotifierProvider(create: (_) => GlobalAppState())],
       child: const MyApp(),
     ),
   );
@@ -23,8 +22,27 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: '脑心愈郁',
       theme: AppTheme.lightTheme,
-      home: const SplashPage(),
+      home: const AuthGate(),
       debugShowCheckedModeBanner: false,
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<GlobalAppState>(
+      builder: (context, state, child) {
+        if (state.isAuthLoading) {
+          return const SplashPage();
+        }
+        if (!state.isLoggedIn) {
+          return const LoginPage();
+        }
+        return const MainHomePage();
+      },
     );
   }
 }
@@ -40,17 +58,6 @@ class _SplashPageState extends State<SplashPage> {
   @override
   void initState() {
     super.initState();
-    _initApp();
-  }
-
-  Future<void> _initApp() async {
-    // 模拟初始化
-    await Future.delayed(const Duration(seconds: 2));
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const MainHomePage()),
-      );
-    }
   }
 
   @override
@@ -80,7 +87,9 @@ class _SplashPageState extends State<SplashPage> {
                     width: 140,
                     height: 140, // Square container for logo
                     decoration: BoxDecoration(
-                      color: Colors.white.withAlpha((0.1 * 255).toInt()), // Light background to see rounded corners
+                      color: Colors.white.withAlpha(
+                        (0.1 * 255).toInt(),
+                      ), // Light background to see rounded corners
                       boxShadow: [
                         // Primary white shadow (reduced opacity for better blending)
                         BoxShadow(
@@ -91,13 +100,17 @@ class _SplashPageState extends State<SplashPage> {
                         ),
                         // Subtle blue shadow for depth and gradient integration
                         BoxShadow(
-                          color: AppTheme.primaryDark.withAlpha((0.2 * 255).toInt()),
+                          color: AppTheme.primaryDark.withAlpha(
+                            (0.2 * 255).toInt(),
+                          ),
                           blurRadius: 8,
                           spreadRadius: 0,
                           offset: Offset(0, 2),
                         ),
                       ],
-                      borderRadius: BorderRadius.circular(20), // Rounded corners for modern look
+                      borderRadius: BorderRadius.circular(
+                        20,
+                      ), // Rounded corners for modern look
                     ),
                     child: _buildAdaptiveLogo(),
                   ),
@@ -178,7 +191,8 @@ class _SplashPageState extends State<SplashPage> {
         'assets/images/logo.png',
         width: 140,
         height: 140,
-        fit: BoxFit.cover, // Changed to cover to ensure image fills the rounded corners
+        fit: BoxFit
+            .cover, // Changed to cover to ensure image fills the rounded corners
         errorBuilder: (context, error, stackTrace) {
           // Fallback to placeholder if image doesn't exist
           return Container(

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../services/data_replay_service.dart';
 import '../services/ble_service.dart';
 import '../services/ble_parser.dart';
+import '../services/session_history_service.dart';
+import '../services/user_database_service.dart';
 
 // 设备连接状态
 enum ConnectionStatus { disconnected, connecting, connected, error }
@@ -80,10 +82,10 @@ enum StimStatus { off, configuring, running, error }
 
 // 治疗模式枚举
 enum TreatmentMode {
-  manual,      // 手动模式
+  manual, // 手动模式
   hrvResponse, // 心率变异性响应模式
   eegResponse, // 脑电响应模式
-  hybrid,      // 混合模式
+  hybrid, // 混合模式
 }
 
 // 模式描述信息
@@ -163,9 +165,9 @@ class UserSettings {
 
 // 安全上限配置
 class SafetyLimits {
-  final double maxIntensity;    // mA (0.0-10.0)
-  final double maxFrequency;    // Hz (1.0-150.0)
-  final double maxPulseWidth;   // μs (60-500)
+  final double maxIntensity; // mA (0.0-10.0)
+  final double maxFrequency; // Hz (1.0-150.0)
+  final double maxPulseWidth; // μs (60-500)
 
   const SafetyLimits({
     required this.maxIntensity,
@@ -181,7 +183,13 @@ enum TimeRange { last24h, last7d, last30d, custom }
 
 // ========== 校准阶段枚举 ==========
 
-enum CalibrationPhase { idle, calibratingBaseline, baselineDone, inducingStress, running }
+enum CalibrationPhase {
+  idle,
+  calibratingBaseline,
+  baselineDone,
+  inducingStress,
+  running,
+}
 
 // ========== 情绪状态模型 ==========
 
@@ -223,14 +231,14 @@ class MoodState {
 
 // 分析指标数据类
 class AnalysisMetrics {
-  final double healthScore;           // 健康评分 0-100
-  final double avgHeartRate;          // 平均心率 BPM
-  final double hrvStressIndex;        // HRV压力指数 0-100
+  final double healthScore; // 健康评分 0-100
+  final double avgHeartRate; // 平均心率 BPM
+  final double hrvStressIndex; // HRV压力指数 0-100
   final double abnormalEegPercentage; // 异常脑电占比 0-100%
   final Duration totalStimulationTime; // 总刺激时长
-  final List<double> intensityTrend;  // 刺激强度趋势数据
+  final List<double> intensityTrend; // 刺激强度趋势数据
   final List<double> physiologicalTrend; // 生理指标趋势数据
-  final DateTime generatedAt;         // 报告生成时间
+  final DateTime generatedAt; // 报告生成时间
 
   AnalysisMetrics({
     required this.healthScore,
@@ -257,7 +265,8 @@ class AnalysisMetrics {
       healthScore: healthScore ?? this.healthScore,
       avgHeartRate: avgHeartRate ?? this.avgHeartRate,
       hrvStressIndex: hrvStressIndex ?? this.hrvStressIndex,
-      abnormalEegPercentage: abnormalEegPercentage ?? this.abnormalEegPercentage,
+      abnormalEegPercentage:
+          abnormalEegPercentage ?? this.abnormalEegPercentage,
       totalStimulationTime: totalStimulationTime ?? this.totalStimulationTime,
       intensityTrend: intensityTrend ?? this.intensityTrend,
       physiologicalTrend: physiologicalTrend ?? this.physiologicalTrend,
@@ -268,10 +277,10 @@ class AnalysisMetrics {
 
 // AI解读数据类（预留接口）
 class AiInterpretation {
-  final String summary;               // 总结
-  final List<String> findings;        // 发现列表
+  final String summary; // 总结
+  final List<String> findings; // 发现列表
   final List<String> recommendations; // 建议列表
-  final DateTime generatedAt;         // 生成时间
+  final DateTime generatedAt; // 生成时间
 
   AiInterpretation({
     required this.summary,
@@ -296,13 +305,27 @@ class AiInterpretation {
 }
 
 class GlobalAppState extends ChangeNotifier {
+  GlobalAppState() {
+    unawaited(initializeApp());
+  }
+
   // ========== 设备连接状态 ==========
-  DeviceConnectionState dbsConnection = DeviceConnectionState(status: ConnectionStatus.disconnected);
-  DeviceConnectionState hrvConnection = DeviceConnectionState(status: ConnectionStatus.disconnected);
+  DeviceConnectionState dbsConnection = DeviceConnectionState(
+    status: ConnectionStatus.disconnected,
+  );
+  DeviceConnectionState hrvConnection = DeviceConnectionState(
+    status: ConnectionStatus.disconnected,
+  );
 
   // ========== 数据采集状态 ==========
-  DataStreamState eegStream = DataStreamState(status: StreamStatus.idle, sampleRate: 250);
-  DataStreamState ecgStream = DataStreamState(status: StreamStatus.idle, sampleRate: 500);
+  DataStreamState eegStream = DataStreamState(
+    status: StreamStatus.idle,
+    sampleRate: 250,
+  );
+  DataStreamState ecgStream = DataStreamState(
+    status: StreamStatus.idle,
+    sampleRate: 500,
+  );
 
   // ========== 刺激器状态 ==========
   StimulationState stimulation = StimulationState(status: StimStatus.off);
@@ -312,6 +335,104 @@ class GlobalAppState extends ChangeNotifier {
 
   // ========== 用户设置 ==========
   UserSettings settings = UserSettings();
+
+  // ========== 用户登录与本地数据库 ==========
+  final UserDatabaseService _userDatabaseService = UserDatabaseService();
+  List<AppUser> _users = [];
+  AppUser? _currentUser;
+  bool _isAuthLoading = true;
+  String? _authError;
+
+  List<AppUser> get users => _users;
+  AppUser? get currentUser => _currentUser;
+  bool get isLoggedIn => _currentUser != null;
+  bool get isAuthLoading => _isAuthLoading;
+  String? get authError => _authError;
+
+  String get activeUserId => _currentUser?.id ?? defaultHistoryUserId;
+  String get activeUserName =>
+      _currentUser?.displayName ?? defaultHistoryUserName;
+
+  Future<void> initializeApp() async {
+    _isAuthLoading = true;
+    _authError = null;
+    notifyListeners();
+    try {
+      final snapshot = await _userDatabaseService.load();
+      _users = snapshot.users;
+      _currentUser = await _userDatabaseService.currentUser();
+      await loadHistorySessions();
+    } catch (e) {
+      _authError = e.toString();
+    } finally {
+      _isAuthLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> login({
+    required String username,
+    required String password,
+  }) async {
+    _isAuthLoading = true;
+    _authError = null;
+    notifyListeners();
+    try {
+      _currentUser = await _userDatabaseService.login(
+        username: username,
+        password: password,
+      );
+      final snapshot = await _userDatabaseService.load();
+      _users = snapshot.users;
+      await loadHistorySessions();
+      return true;
+    } catch (e) {
+      _authError = e.toString();
+      return false;
+    } finally {
+      _isAuthLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> registerUser({
+    required String username,
+    required String password,
+    required String displayName,
+    String role = 'patient',
+  }) async {
+    _isAuthLoading = true;
+    _authError = null;
+    notifyListeners();
+    try {
+      _currentUser = await _userDatabaseService.register(
+        username: username,
+        password: password,
+        displayName: displayName,
+        role: role,
+      );
+      final snapshot = await _userDatabaseService.load();
+      _users = snapshot.users;
+      await loadHistorySessions();
+      return true;
+    } catch (e) {
+      _authError = e.toString();
+      return false;
+    } finally {
+      _isAuthLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> logout() async {
+    if (_bleService.isConnected) {
+      await disconnectBle();
+    }
+    await _userDatabaseService.logout();
+    _currentUser = null;
+    _historySessions = [];
+    notifyListeners();
+  }
 
   // ========== 情绪状态 ==========
   MoodState _moodState = _createRandomMoodState();
@@ -410,7 +531,8 @@ class GlobalAppState extends ChangeNotifier {
   };
 
   SafetyLimits getCurrentSafetyLimits() {
-    return _modeSafetyLimits[stimulation.mode] ?? _modeSafetyLimits[TreatmentMode.manual]!;
+    return _modeSafetyLimits[stimulation.mode] ??
+        _modeSafetyLimits[TreatmentMode.manual]!;
   }
 
   // 可选：添加安全上限更新方法
@@ -436,10 +558,15 @@ class GlobalAppState extends ChangeNotifier {
   bool _useBleSource = false;
   StreamSubscription<BlePacket>? _blePacketSub;
   StreamSubscription<bool>? _bleConnSub;
+  final SessionHistoryService _historyService = SessionHistoryService();
+  List<SessionSummary> _historySessions = [];
+  bool _isLoadingHistory = false;
 
   // BLE 设备信息
   bool get useBleSource => _useBleSource;
   bool get isBleConnected => _bleService.isConnected;
+  List<SessionSummary> get historySessions => _historySessions;
+  bool get isLoadingHistory => _isLoadingHistory;
 
   // STR 引擎状态
   int _engineState = 0;
@@ -512,7 +639,9 @@ class GlobalAppState extends ChangeNotifier {
   int get crcMissing => _bleService.crcMissing;
 
   /// 初始化数据回放
-  void startDataReplay({String assetPath = 'assets/ecg_short_sample.json'}) async {
+  void startDataReplay({
+    String assetPath = 'assets/ecg_short_sample.json',
+  }) async {
     // 设置连接状态
     dbsConnection = DeviceConnectionState(
       status: ConnectionStatus.connected,
@@ -537,8 +666,16 @@ class GlobalAppState extends ChangeNotifier {
     _hrSub?.cancel();
 
     // 重置数据流
-    eegStream = eegStream.copyWith(status: StreamStatus.streaming, sampleRate: 250, waveform: []);
-    ecgStream = ecgStream.copyWith(status: StreamStatus.streaming, sampleRate: 500, waveform: []);
+    eegStream = eegStream.copyWith(
+      status: StreamStatus.streaming,
+      sampleRate: 250,
+      waveform: [],
+    );
+    ecgStream = ecgStream.copyWith(
+      status: StreamStatus.streaming,
+      sampleRate: 500,
+      waveform: [],
+    );
     _totalEcgSamples = 0;
     _recentHeartRates.clear();
     notifyListeners();
@@ -555,7 +692,8 @@ class GlobalAppState extends ChangeNotifier {
     _batchFlushTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       if (batchBuffer.isEmpty) return;
 
-      final newWave = List<double>.from(ecgStream.waveform)..addAll(batchBuffer);
+      final newWave = List<double>.from(ecgStream.waveform)
+        ..addAll(batchBuffer);
       batchBuffer.clear();
 
       // 保留最近 10 秒数据
@@ -564,7 +702,9 @@ class GlobalAppState extends ChangeNotifier {
       }
       ecgStream = ecgStream.copyWith(
         waveform: newWave,
-        duration: Duration(milliseconds: (_totalEcgSamples * 1000 ~/ ecgStream.sampleRate)),
+        duration: Duration(
+          milliseconds: (_totalEcgSamples * 1000 ~/ ecgStream.sampleRate),
+        ),
       );
       notifyListeners();
     });
@@ -587,8 +727,12 @@ class GlobalAppState extends ChangeNotifier {
     _batchFlushTimer = null;
     _ecgSub?.cancel();
     _hrSub?.cancel();
-    dbsConnection = DeviceConnectionState(status: ConnectionStatus.disconnected);
-    hrvConnection = DeviceConnectionState(status: ConnectionStatus.disconnected);
+    dbsConnection = DeviceConnectionState(
+      status: ConnectionStatus.disconnected,
+    );
+    hrvConnection = DeviceConnectionState(
+      status: ConnectionStatus.disconnected,
+    );
     eegStream = eegStream.copyWith(status: StreamStatus.idle, waveform: []);
     ecgStream = ecgStream.copyWith(status: StreamStatus.idle, waveform: []);
     notifyListeners();
@@ -616,6 +760,7 @@ class GlobalAppState extends ChangeNotifier {
           status: ConnectionStatus.disconnected,
         );
         _useBleSource = false;
+        unawaited(_finishHistorySessionAndReload());
       }
       notifyListeners();
     });
@@ -636,6 +781,12 @@ class GlobalAppState extends ChangeNotifier {
         _rPeakAbsoluteIndices.clear();
         _rPeakIndices = [];
         _recentHeartRates.clear();
+        await _historyService.startSession(
+          userId: activeUserId,
+          userName: activeUserName,
+          deviceName: 'KT6368A 胸带',
+          sampleRate: ecgStream.sampleRate,
+        );
         _startBleBatchTimer();
       }
 
@@ -665,8 +816,11 @@ class GlobalAppState extends ChangeNotifier {
     await _bleConnSub?.cancel();
     _bleConnSub = null;
     await _bleService.disconnect();
+    await _finishHistorySessionAndReload();
     _useBleSource = false;
-    hrvConnection = DeviceConnectionState(status: ConnectionStatus.disconnected);
+    hrvConnection = DeviceConnectionState(
+      status: ConnectionStatus.disconnected,
+    );
     ecgStream = ecgStream.copyWith(status: StreamStatus.idle, waveform: []);
     notifyListeners();
   }
@@ -707,8 +861,12 @@ class GlobalAppState extends ChangeNotifier {
 
   /// BLE 数据包处理
   void _onBlePacket(BlePacket packet) {
+    unawaited(_historyService.recordPacket(packet));
+
     // 1. SYS
-    debugPrint('[State] _onBlePacket: battPct=${packet.battPct}, ecgLen=${packet.ecgWaveform.length}, hasHrv=${packet.hasHrv}');
+    debugPrint(
+      '[State] _onBlePacket: battPct=${packet.battPct}, ecgLen=${packet.ecgWaveform.length}, hasHrv=${packet.hasHrv}',
+    );
     _batteryPct = packet.battPct;
     _battV = packet.battV;
     _chargeState = packet.charge;
@@ -732,7 +890,10 @@ class GlobalAppState extends ChangeNotifier {
       }
       // 防内存无限增长：最多保留 10000 个
       if (_rPeakAbsoluteIndices.length > 10000) {
-        _rPeakAbsoluteIndices.removeRange(0, _rPeakAbsoluteIndices.length - 5000);
+        _rPeakAbsoluteIndices.removeRange(
+          0,
+          _rPeakAbsoluteIndices.length - 5000,
+        );
       }
     }
 
@@ -760,7 +921,9 @@ class GlobalAppState extends ChangeNotifier {
     }
 
     // 5. STR 引擎
-    debugPrint('[State] engineState=${packet.strState}, scoreRaw=${packet.scoreRaw}, scoreSmoothed=${packet.scoreSmoothed}, isStressed=${packet.isStressed}');
+    debugPrint(
+      '[State] engineState=${packet.strState}, scoreRaw=${packet.scoreRaw}, scoreSmoothed=${packet.scoreSmoothed}, isStressed=${packet.isStressed}',
+    );
     _engineState = packet.strState;
     _calmDone = packet.calmDone;
     _calmNeed = packet.calmNeed;
@@ -829,7 +992,9 @@ class GlobalAppState extends ChangeNotifier {
       if (_bleEcgBuffer.isNotEmpty) {
         final min = _bleEcgBuffer.reduce((a, b) => a < b ? a : b);
         final max = _bleEcgBuffer.reduce((a, b) => a > b ? a : b);
-        debugPrint('[State] batchFlush: ${_bleEcgBuffer.length}点 -> waveform=${newWave.length}点, 范围=[$min, $max]');
+        debugPrint(
+          '[State] batchFlush: ${_bleEcgBuffer.length}点 -> waveform=${newWave.length}点, 范围=[$min, $max]',
+        );
       }
       _bleEcgBuffer.clear();
 
@@ -842,8 +1007,12 @@ class GlobalAppState extends ChangeNotifier {
       final currentWfLen = newWave.length;
       final trimmedTotal = _totalEcgSamples - currentWfLen;
       if (trimmedTotal >= 0) {
-        _rPeakAbsoluteIndices.removeWhere((i) => i < trimmedTotal || i >= _totalEcgSamples);
-        _rPeakIndices = _rPeakAbsoluteIndices.map((i) => i - trimmedTotal).toList();
+        _rPeakAbsoluteIndices.removeWhere(
+          (i) => i < trimmedTotal || i >= _totalEcgSamples,
+        );
+        _rPeakIndices = _rPeakAbsoluteIndices
+            .map((i) => i - trimmedTotal)
+            .toList();
       } else {
         _rPeakIndices = [];
       }
@@ -870,9 +1039,24 @@ class GlobalAppState extends ChangeNotifier {
     return _recentHeartRates.reduce((a, b) => a + b) / _recentHeartRates.length;
   }
 
+  Future<void> loadHistorySessions() async {
+    _isLoadingHistory = true;
+    notifyListeners();
+    _historySessions = await _historyService.loadSessions(userId: activeUserId);
+    _isLoadingHistory = false;
+    notifyListeners();
+  }
+
+  Future<void> _finishHistorySessionAndReload() async {
+    await _historyService.finishSession();
+    _historySessions = await _historyService.loadSessions(userId: activeUserId);
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _replayService.dispose();
+    unawaited(_historyService.finishSession());
     _batchFlushTimer?.cancel();
     _ecgSub?.cancel();
     _hrSub?.cancel();
@@ -885,10 +1069,14 @@ class GlobalAppState extends ChangeNotifier {
   // ========== 模式管理方法 ==========
 
   // 获取当前模式描述
-  ModeDescription get currentModeDescription => _getModeDescription(stimulation.mode);
+  ModeDescription get currentModeDescription =>
+      _getModeDescription(stimulation.mode);
 
   // 切换治疗模式
-  Future<bool> changeTreatmentMode(TreatmentMode newMode, {bool force = false}) async {
+  Future<bool> changeTreatmentMode(
+    TreatmentMode newMode, {
+    bool force = false,
+  }) async {
     // 安全检查：如果设备正在运行且不是强制切换，需要确认
     if (stimulation.status == StimStatus.running && !force) {
       return false; // 需要二次确认
@@ -1034,8 +1222,14 @@ class GlobalAppState extends ChangeNotifier {
     }
 
     // 生成趋势数据
-    final intensityTrend = List.generate(dataPointCount, (i) => 1.0 + random.nextDouble() * 3.0);
-    final physiologicalTrend = List.generate(dataPointCount, (i) => 50.0 + random.nextDouble() * 30.0);
+    final intensityTrend = List.generate(
+      dataPointCount,
+      (i) => 1.0 + random.nextDouble() * 3.0,
+    );
+    final physiologicalTrend = List.generate(
+      dataPointCount,
+      (i) => 50.0 + random.nextDouble() * 30.0,
+    );
 
     return AnalysisMetrics(
       healthScore: healthScore,
@@ -1078,7 +1272,9 @@ class GlobalAppState extends ChangeNotifier {
 
     // 根据异常脑电占比添加发现
     if (metrics.abnormalEegPercentage > 20) {
-      findings.add('异常脑电活动占比较高（${metrics.abnormalEegPercentage.toStringAsFixed(1)}%）');
+      findings.add(
+        '异常脑电活动占比较高（${metrics.abnormalEegPercentage.toStringAsFixed(1)}%）',
+      );
       recommendations.add('关注脑电信号变化，必要时调整刺激参数');
     }
 
@@ -1155,5 +1351,4 @@ class GlobalAppState extends ChangeNotifier {
         return '状态优秀，保持良好习惯，帮助他人';
     }
   }
-
 }

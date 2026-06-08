@@ -95,7 +95,9 @@ class BleParser {
         final crcBody = text.substring(5, bodyEnd); // 跳过 "START"
         if (!_verifyCrc(crcBody, expectedCrc)) {
           crcBad++;
-          debugPrint('[Parser] CRC 校验失败 #$crcBad: expected=0x${expectedCrc.toRadixString(16).padLeft(2, '0')}, body="${crcBody.length > 80 ? "${crcBody.substring(0, 80)}..." : crcBody}"');
+          debugPrint(
+            '[Parser] CRC 校验失败 #$crcBad: expected=0x${expectedCrc.toRadixString(16).padLeft(2, '0')}, body="${crcBody.length > 80 ? "${crcBody.substring(0, 80)}..." : crcBody}"',
+          );
           if (!permissive) return null;
         } else {
           crcOk++;
@@ -111,9 +113,15 @@ class BleParser {
       // SYS
       final sysParts = _splitLine(lines['SYS']);
       final mode = sysParts.isNotEmpty ? int.tryParse(sysParts[0]) ?? 0 : 0;
-      final sourceFs = sysParts.length > 1 ? _parseDouble(sysParts[1]) ?? 500.0 : 500.0;
-      final processFs = sysParts.length > 2 ? _parseDouble(sysParts[2]) ?? 500.0 : 500.0;
-      final battV = sysParts.length > 3 ? _parseDouble(sysParts[3]) ?? 0.0 : 0.0;
+      final sourceFs = sysParts.length > 1
+          ? _parseDouble(sysParts[1]) ?? 500.0
+          : 500.0;
+      final processFs = sysParts.length > 2
+          ? _parseDouble(sysParts[2]) ?? 500.0
+          : 500.0;
+      final battV = sysParts.length > 3
+          ? _parseDouble(sysParts[3]) ?? 0.0
+          : 0.0;
       final battPct = sysParts.length > 4 ? int.tryParse(sysParts[4]) ?? 0 : 0;
       final charge = sysParts.length > 5 ? int.tryParse(sysParts[5]) ?? 0 : 0;
 
@@ -152,12 +160,24 @@ class BleParser {
       final strState = strParts.isNotEmpty ? int.tryParse(strParts[0]) ?? 0 : 0;
       final calmDone = strParts.length > 1 ? int.tryParse(strParts[1]) ?? 0 : 0;
       final calmNeed = strParts.length > 2 ? int.tryParse(strParts[2]) ?? 7 : 7;
-      final stressDone = strParts.length > 3 ? int.tryParse(strParts[3]) ?? 0 : 0;
-      final stressNeed = strParts.length > 4 ? int.tryParse(strParts[4]) ?? 2 : 2;
-      final scoreRaw = strParts.length > 5 ? _parseDouble(strParts[5]) ?? 0.0 : 0.0;
-      final scoreSmoothed = strParts.length > 6 ? _parseDouble(strParts[6]) ?? 0.0 : 0.0;
-      final isStressed = strParts.length > 7 ? int.tryParse(strParts[7]) ?? 0 : 0;
-      final inferCount = strParts.length > 8 ? int.tryParse(strParts[8]) ?? 0 : 0;
+      final stressDone = strParts.length > 3
+          ? int.tryParse(strParts[3]) ?? 0
+          : 0;
+      final stressNeed = strParts.length > 4
+          ? int.tryParse(strParts[4]) ?? 2
+          : 2;
+      final scoreRaw = strParts.length > 5
+          ? _parseDouble(strParts[5]) ?? 0.0
+          : 0.0;
+      final scoreSmoothed = strParts.length > 6
+          ? _parseDouble(strParts[6]) ?? 0.0
+          : 0.0;
+      final isStressed = strParts.length > 7
+          ? int.tryParse(strParts[7]) ?? 0
+          : 0;
+      final inferCount = strParts.length > 8
+          ? int.tryParse(strParts[8]) ?? 0
+          : 0;
 
       // DBG:DCRC（可选）
       int? dbgCrcOk;

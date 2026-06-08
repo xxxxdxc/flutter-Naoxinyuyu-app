@@ -23,10 +23,10 @@ class AppTheme {
   static const Color divider = Color(0xFFBDBDBD);
 
   // 模式颜色
-  static const Color modeManual = Color(0xFF4FC3F7);      // 浅蓝色
+  static const Color modeManual = Color(0xFF4FC3F7); // 浅蓝色
   static const Color modeHrvResponse = Color(0xFFFF9800); // 橙色
   static const Color modeEegResponse = Color(0xFF1976D2); // 深蓝色
-  static const Color modeHybrid = Color(0xFF4CAF50);      // 绿色
+  static const Color modeHybrid = Color(0xFF4CAF50); // 绿色
 
   static ThemeData get lightTheme {
     return ThemeData(
@@ -41,17 +41,13 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: surface,
         elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryMain,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           minimumSize: const Size(120, 48),
         ),
       ),
@@ -62,9 +58,21 @@ class AppTheme {
         surface: surface,
       ),
       textTheme: const TextTheme(
-        headlineSmall: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: textPrimary),
-        titleLarge: TextStyle(fontSize: 20, fontWeight: FontWeight.w500, color: textPrimary),
-        titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: textPrimary),
+        headlineSmall: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: textPrimary,
+        ),
+        titleLarge: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w500,
+          color: textPrimary,
+        ),
+        titleMedium: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          color: textPrimary,
+        ),
         bodyLarge: TextStyle(fontSize: 14, color: textPrimary),
         bodyMedium: TextStyle(fontSize: 14, color: textSecondary),
         labelSmall: TextStyle(fontSize: 12, color: textSecondary),

@@ -3,21 +3,21 @@ import 'package:flutter/material.dart';
 
 /// 趋势图表绘制器 - 显示刺激强度与生理指标的双折线图
 class TrendChartPainter extends CustomPainter {
-  final List<double> intensityData;    // 刺激强度数据
+  final List<double> intensityData; // 刺激强度数据
   final List<double> physiologicalData; // 生理指标数据
-  final Color intensityColor;          // 刺激强度线条颜色
-  final Color physiologicalColor;      // 生理指标线条颜色
-  final String xAxisTitle;             // X轴标题
-  final String intensityYAxisTitle;    // 左Y轴标题
+  final Color intensityColor; // 刺激强度线条颜色
+  final Color physiologicalColor; // 生理指标线条颜色
+  final String xAxisTitle; // X轴标题
+  final String intensityYAxisTitle; // 左Y轴标题
   final String physiologicalYAxisTitle; // 右Y轴标题
-  final bool showGrid;                 // 是否显示网格
-  final Color gridColor;               // 网格颜色
-  final Color axisColor;               // 坐标轴颜色
-  final TextStyle? axisTextStyle;      // 坐标轴文字样式
-  final double? leftMargin;            // 左侧边距（像素或null时使用百分比）
-  final double? rightMargin;           // 右侧边距
-  final double? topMargin;             // 顶部边距
-  final double? bottomMargin;          // 底部边距
+  final bool showGrid; // 是否显示网格
+  final Color gridColor; // 网格颜色
+  final Color axisColor; // 坐标轴颜色
+  final TextStyle? axisTextStyle; // 坐标轴文字样式
+  final double? leftMargin; // 左侧边距（像素或null时使用百分比）
+  final double? rightMargin; // 右侧边距
+  final double? topMargin; // 顶部边距
+  final double? bottomMargin; // 底部边距
 
   TrendChartPainter({
     required this.intensityData,
@@ -41,11 +41,14 @@ class TrendChartPainter extends CustomPainter {
   double _effectiveLeftMargin(Size size) => leftMargin ?? size.width * 0.12;
   double _effectiveRightMargin(Size size) => rightMargin ?? size.width * 0.12;
   double _effectiveTopMargin(Size size) => topMargin ?? size.height * 0.1;
-  double _effectiveBottomMargin(Size size) => bottomMargin ?? size.height * 0.15;
+  double _effectiveBottomMargin(Size size) =>
+      bottomMargin ?? size.height * 0.15;
 
   // 计算可用绘图区域
-  double _chartWidth(Size size) => size.width - _effectiveLeftMargin(size) - _effectiveRightMargin(size);
-  double _chartHeight(Size size) => size.height - _effectiveTopMargin(size) - _effectiveBottomMargin(size);
+  double _chartWidth(Size size) =>
+      size.width - _effectiveLeftMargin(size) - _effectiveRightMargin(size);
+  double _chartHeight(Size size) =>
+      size.height - _effectiveTopMargin(size) - _effectiveBottomMargin(size);
 
   // 数据采样方法：当数据点过多时进行采样
   List<double> _sampleData(List<double> originalData, int targetCount) {
@@ -68,7 +71,10 @@ class TrendChartPainter extends CustomPainter {
     final int maxTicks = (chartWidth / minLabelWidth).floor();
 
     // 考虑数据点数量，但标签数不超过数据点数量
-    final int dataPointCount = max(intensityData.length, physiologicalData.length);
+    final int dataPointCount = max(
+      intensityData.length,
+      physiologicalData.length,
+    );
     return max(3, min(maxTicks, min(dataPointCount, 8))); // 最少3个，最多8个标签
   }
 
@@ -126,13 +132,21 @@ class TrendChartPainter extends CustomPainter {
     // 绘制垂直网格线（在绘图区域内）
     for (int i = 1; i < verticalLines; i++) {
       final x = leftMargin + chartWidth * i / verticalLines;
-      canvas.drawLine(Offset(x, topMargin), Offset(x, size.height - bottomMargin), paint);
+      canvas.drawLine(
+        Offset(x, topMargin),
+        Offset(x, size.height - bottomMargin),
+        paint,
+      );
     }
 
     // 绘制水平网格线（在绘图区域内）
     for (int i = 1; i < horizontalLines; i++) {
       final y = topMargin + chartHeight * i / horizontalLines;
-      canvas.drawLine(Offset(leftMargin, y), Offset(size.width - rightMargin, y), paint);
+      canvas.drawLine(
+        Offset(leftMargin, y),
+        Offset(size.width - rightMargin, y),
+        paint,
+      );
     }
   }
 
@@ -173,10 +187,8 @@ class TrendChartPainter extends CustomPainter {
   }
 
   void _drawAxisLabels(Canvas canvas, Size size) {
-    final textStyle = axisTextStyle ?? TextStyle(
-      color: axisColor,
-      fontSize: 10,
-    );
+    final textStyle =
+        axisTextStyle ?? TextStyle(color: axisColor, fontSize: 10);
 
     final leftMargin = _effectiveLeftMargin(size);
     final rightMargin = _effectiveRightMargin(size);
@@ -308,7 +320,10 @@ class TrendChartPainter extends CustomPainter {
     // 如果数据点过密，进行采样
     if (actualXSpacing < minXSpacing && data.length > 8) {
       final targetCount = (chartWidth / minXSpacing).floor();
-      effectiveData = _sampleData(data, targetCount.clamp(6, 16)); // 最少6个，最多16个点
+      effectiveData = _sampleData(
+        data,
+        targetCount.clamp(6, 16),
+      ); // 最少6个，最多16个点
     }
 
     final paint = Paint()
@@ -349,12 +364,7 @@ class TrendChartPainter extends CustomPainter {
     final legendStartX = size.width / 2 - legendSpacing;
 
     // 刺激强度图例
-    _drawLegendItem(
-      canvas,
-      '刺激强度',
-      intensityColor,
-      Offset(legendStartX, 10),
-    );
+    _drawLegendItem(canvas, '刺激强度', intensityColor, Offset(legendStartX, 10));
 
     // 生理指标图例
     _drawLegendItem(
@@ -365,7 +375,12 @@ class TrendChartPainter extends CustomPainter {
     );
   }
 
-  void _drawLegendItem(Canvas canvas, String label, Color color, Offset position) {
+  void _drawLegendItem(
+    Canvas canvas,
+    String label,
+    Color color,
+    Offset position,
+  ) {
     // 图例颜色标记
     final markerPaint = Paint()
       ..color = color
@@ -374,10 +389,8 @@ class TrendChartPainter extends CustomPainter {
     canvas.drawCircle(Offset(position.dx + 8, position.dy + 8), 4, markerPaint);
 
     // 图例文本
-    final textStyle = axisTextStyle ?? TextStyle(
-      color: axisColor,
-      fontSize: 10,
-    );
+    final textStyle =
+        axisTextStyle ?? TextStyle(color: axisColor, fontSize: 10);
 
     _drawTextLeftAligned(
       canvas,
@@ -387,7 +400,12 @@ class TrendChartPainter extends CustomPainter {
     );
   }
 
-  void _drawTextCentered(Canvas canvas, String text, Offset position, TextStyle style) {
+  void _drawTextCentered(
+    Canvas canvas,
+    String text,
+    Offset position,
+    TextStyle style,
+  ) {
     final textSpan = TextSpan(text: text, style: style);
     final textPainter = TextPainter(
       text: textSpan,
@@ -396,11 +414,19 @@ class TrendChartPainter extends CustomPainter {
 
     textPainter.paint(
       canvas,
-      Offset(position.dx - textPainter.width / 2, position.dy - textPainter.height / 2),
+      Offset(
+        position.dx - textPainter.width / 2,
+        position.dy - textPainter.height / 2,
+      ),
     );
   }
 
-  void _drawTextRightAligned(Canvas canvas, String text, Offset position, TextStyle style) {
+  void _drawTextRightAligned(
+    Canvas canvas,
+    String text,
+    Offset position,
+    TextStyle style,
+  ) {
     final textSpan = TextSpan(text: text, style: style);
     final textPainter = TextPainter(
       text: textSpan,
@@ -409,11 +435,19 @@ class TrendChartPainter extends CustomPainter {
 
     textPainter.paint(
       canvas,
-      Offset(position.dx - textPainter.width, position.dy - textPainter.height / 2),
+      Offset(
+        position.dx - textPainter.width,
+        position.dy - textPainter.height / 2,
+      ),
     );
   }
 
-  void _drawTextLeftAligned(Canvas canvas, String text, Offset position, TextStyle style) {
+  void _drawTextLeftAligned(
+    Canvas canvas,
+    String text,
+    Offset position,
+    TextStyle style,
+  ) {
     final textSpan = TextSpan(text: text, style: style);
     final textPainter = TextPainter(
       text: textSpan,

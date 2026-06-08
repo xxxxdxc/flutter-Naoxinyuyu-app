@@ -11,12 +11,18 @@ class DashboardPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('脑心愈郁', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.brandPurple)),
+        title: Text(
+          '脑心愈郁',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: AppTheme.brandPurple,
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.account_circle_outlined),
-            onPressed: () {},
-          )
+            onPressed: () => _showUserPanel(context),
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -41,12 +47,8 @@ class DashboardPage extends StatelessWidget {
         elevation: 0,
         child: Consumer<GlobalAppState>(
           builder: (context, state, _) => Icon(
-            state.isBleConnected
-                ? Icons.bluetooth_connected
-                : Icons.bluetooth,
-            color: state.isBleConnected
-                ? Colors.green
-                : AppTheme.primaryDark,
+            state.isBleConnected ? Icons.bluetooth_connected : Icons.bluetooth,
+            color: state.isBleConnected ? Colors.green : AppTheme.primaryDark,
           ),
         ),
       ),
@@ -63,6 +65,96 @@ class DashboardPage extends StatelessWidget {
         return _DevicePanelContent();
       },
     );
+  }
+
+  void _showUserPanel(BuildContext context) {
+    final state = context.read<GlobalAppState>();
+    final user = state.currentUser;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('用户信息'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.account_circle_outlined,
+                  color: AppTheme.primaryMain,
+                  size: 40,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        user?.displayName ?? '未登录',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        user == null
+                            ? '--'
+                            : '${user.username} · ${_roleLabel(user.role)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text('历史采集：${state.historySessions.length} 次'),
+            if (user != null)
+              Text(
+                '最近登录：${_formatDateTime(user.lastLoginAt)}',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('关闭'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await state.logout();
+            },
+            icon: const Icon(Icons.logout),
+            label: const Text('退出登录'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _roleLabel(String role) {
+    switch (role) {
+      case 'doctor':
+        return '医生';
+      case 'patient':
+        return '患者';
+      default:
+        return role;
+    }
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${dateTime.year}-${two(dateTime.month)}-${two(dateTime.day)} '
+        '${two(dateTime.hour)}:${two(dateTime.minute)}';
   }
 }
 
@@ -103,7 +195,10 @@ class _DevicePanelContentState extends State<_DevicePanelContent> {
               // DBS 设备（预留）
               ListTile(
                 leading: Icon(Icons.psychology, color: Colors.grey[400]),
-                title: Text('DBS 设备', style: TextStyle(color: Colors.grey[400])),
+                title: Text(
+                  'DBS 设备',
+                  style: TextStyle(color: Colors.grey[400]),
+                ),
                 subtitle: Text('预留', style: TextStyle(color: Colors.grey[500])),
                 trailing: ElevatedButton(
                   onPressed: null,
@@ -131,7 +226,8 @@ class _DevicePanelContentState extends State<_DevicePanelContent> {
   Widget _buildHrvTrailing(GlobalAppState state) {
     if (_isConnecting) {
       return const SizedBox(
-        width: 24, height: 24,
+        width: 24,
+        height: 24,
         child: CircularProgressIndicator(strokeWidth: 2),
       );
     }
@@ -154,24 +250,24 @@ class _DevicePanelContentState extends State<_DevicePanelContent> {
       if (mounted) {
         setState(() => _isConnecting = false);
         if (!ok) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('连接失败：设备不支持数据通知')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('连接失败：设备不支持数据通知')));
         }
       }
     } on BleConnectException catch (e) {
       if (mounted) {
         setState(() => _isConnecting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isConnecting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('连接异常: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('连接异常: $e')));
       }
     }
   }
@@ -191,7 +287,8 @@ class _DeviceCardsRow extends StatelessWidget {
                 title: 'HRV 胸带',
                 icon: Icons.watch,
                 color: AppTheme.deviceHrv,
-                isConnected: state.hrvConnection.status == ConnectionStatus.connected,
+                isConnected:
+                    state.hrvConnection.status == ConnectionStatus.connected,
                 battery: state.hrvConnection.batteryLevel ?? 0,
               ),
             ),
@@ -233,7 +330,9 @@ class _DeviceCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppTheme.divider.withAlpha((0.3 * 255).toInt())),
+        side: BorderSide(
+          color: AppTheme.divider.withAlpha((0.3 * 255).toInt()),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -256,9 +355,16 @@ class _DeviceCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Icon(Icons.battery_charging_full, size: 12, color: AppTheme.textSecondary),
+                      Icon(
+                        Icons.battery_charging_full,
+                        size: 12,
+                        color: AppTheme.textSecondary,
+                      ),
                       const SizedBox(width: 2),
-                      Text('$battery%', style: Theme.of(context).textTheme.labelSmall),
+                      Text(
+                        '$battery%',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
                     ],
                   ),
                 ],
@@ -297,7 +403,9 @@ class _HeartRateCard extends StatelessWidget {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: AppTheme.divider.withAlpha((0.3 * 255).toInt())),
+            side: BorderSide(
+              color: AppTheme.divider.withAlpha((0.3 * 255).toInt()),
+            ),
           ),
           child: Padding(
             padding: const EdgeInsets.all(24.0),
@@ -314,15 +422,29 @@ class _HeartRateCard extends StatelessWidget {
                       CircularProgressIndicator(
                         value: progress,
                         strokeWidth: 12,
-                        backgroundColor: AppTheme.primaryMain.withAlpha((0.1 * 255).toInt()),
-                        valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryMain),
+                        backgroundColor: AppTheme.primaryMain.withAlpha(
+                          (0.1 * 255).toInt(),
+                        ),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          AppTheme.primaryMain,
+                        ),
                       ),
                       Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(displayHr, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: 48, color: AppTheme.primaryMain)),
-                            Text('BPM', style: Theme.of(context).textTheme.labelSmall),
+                            Text(
+                              displayHr,
+                              style: Theme.of(context).textTheme.headlineSmall
+                                  ?.copyWith(
+                                    fontSize: 48,
+                                    color: AppTheme.primaryMain,
+                                  ),
+                            ),
+                            Text(
+                              'BPM',
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
                           ],
                         ),
                       ),
@@ -335,14 +457,28 @@ class _HeartRateCard extends StatelessWidget {
                   children: [
                     Column(
                       children: [
-                        Text('最高', style: Theme.of(context).textTheme.labelSmall),
-                        Text(maxHr, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        Text(
+                          '最高',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                        Text(
+                          maxHr,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
                       ],
                     ),
                     Column(
                       children: [
-                        Text('最低', style: Theme.of(context).textTheme.labelSmall),
-                        Text(minHr, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        Text(
+                          '最低',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                        Text(
+                          minHr,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
                       ],
                     ),
                   ],
@@ -403,7 +539,6 @@ class _MetricsGrid extends StatelessWidget {
   }
 }
 
-
 class _MetricItem extends StatelessWidget {
   final String title;
   final String value;
@@ -423,7 +558,9 @@ class _MetricItem extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppTheme.divider.withAlpha((0.3 * 255).toInt())),
+        side: BorderSide(
+          color: AppTheme.divider.withAlpha((0.3 * 255).toInt()),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -503,9 +640,8 @@ class _ModeCard extends StatelessWidget {
                       children: [
                         Text(
                           '当前模式',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: AppTheme.textSecondary,
-                          ),
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: AppTheme.textSecondary),
                         ),
                         const SizedBox(height: 4),
                         Row(
@@ -513,10 +649,11 @@ class _ModeCard extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 modeDesc.name,
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: modeDesc.color,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      color: modeDesc.color,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -527,7 +664,9 @@ class _ModeCard extends StatelessWidget {
                               width: 8,
                               height: 8,
                               decoration: BoxDecoration(
-                                color: state.stimulation.status == StimStatus.running
+                                color:
+                                    state.stimulation.status ==
+                                        StimStatus.running
                                     ? AppTheme.error
                                     : AppTheme.connected,
                                 shape: BoxShape.circle,
@@ -580,46 +719,51 @@ class _ModeSelectorBottomSheet extends StatelessWidget {
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.8,
           ),
-          child: SafeArea(child: ListView(
-            shrinkWrap: true,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16.0),
-            children: [
-              // 标题
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '选择治疗模式',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '当前模式: ${currentMode.name}',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppTheme.textSecondary,
+          child: SafeArea(
+            child: ListView(
+              shrinkWrap: true,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16.0),
+              children: [
+                // 标题
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '选择治疗模式',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 8),
+                Text(
+                  '当前模式: ${currentMode.name}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 16),
 
-              // 模式列表
-              ...allModes.map((modeDesc) => _ModeOptionTile(
-                modeDesc: modeDesc,
-                isSelected: modeDesc.mode == state.stimulation.mode,
-                onTap: () => _handleModeSelection(context, state, modeDesc.mode),
-              )),
+                // 模式列表
+                ...allModes.map(
+                  (modeDesc) => _ModeOptionTile(
+                    modeDesc: modeDesc,
+                    isSelected: modeDesc.mode == state.stimulation.mode,
+                    onTap: () =>
+                        _handleModeSelection(context, state, modeDesc.mode),
+                  ),
+                ),
 
-              const SizedBox(height: 16),
-            ],
-          )),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
         );
       },
     );
@@ -632,13 +776,16 @@ class _ModeSelectorBottomSheet extends StatelessWidget {
   ) async {
     // 尝试切换模式
     final success = await state.changeTreatmentMode(newMode);
+    if (!context.mounted) return;
 
     if (!success) {
       // 需要确认（设备正在运行）
       final confirmed = await _showConfirmationDialog(context, state, newMode);
+      if (!context.mounted) return;
       if (confirmed) {
         // 强制切换模式
         await state.changeTreatmentMode(newMode, force: true);
+        if (!context.mounted) return;
         Navigator.pop(context); // 关闭底部面板
         _showSuccessSnackbar(context, '模式已切换，刺激已停止');
       }
@@ -654,53 +801,55 @@ class _ModeSelectorBottomSheet extends StatelessWidget {
     GlobalAppState state,
     TreatmentMode newMode,
   ) async {
-    final newModeDesc = state.getAllModeDescriptions()
-        .firstWhere((desc) => desc.mode == newMode);
+    final newModeDesc = state.getAllModeDescriptions().firstWhere(
+      (desc) => desc.mode == newMode,
+    );
 
     return await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认切换模式'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('设备正在运行刺激，切换模式将停止当前刺激。'),
-            const SizedBox(height: 16),
-            const Text('当前刺激参数:'),
-            Text('• 强度: ${state.stimulation.intensity} mA'),
-            Text('• 频率: ${state.stimulation.frequency} Hz'),
-            Text('• 脉宽: ${state.stimulation.pulseWidth} μs'),
-            const SizedBox(height: 16),
-            Text('切换到: ${newModeDesc.name}'),
-            Text('模式特点: ${newModeDesc.description}'),
-            const SizedBox(height: 16),
-            const Text('确定要切换吗？', style: TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.error,
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('确认切换模式'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('设备正在运行刺激，切换模式将停止当前刺激。'),
+                const SizedBox(height: 16),
+                const Text('当前刺激参数:'),
+                Text('• 强度: ${state.stimulation.intensity} mA'),
+                Text('• 频率: ${state.stimulation.frequency} Hz'),
+                Text('• 脉宽: ${state.stimulation.pulseWidth} μs'),
+                const SizedBox(height: 16),
+                Text('切换到: ${newModeDesc.name}'),
+                Text('模式特点: ${newModeDesc.description}'),
+                const SizedBox(height: 16),
+                const Text(
+                  '确定要切换吗？',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
             ),
-            child: const Text('停止并切换'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('取消'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.error,
+                ),
+                child: const Text('停止并切换'),
+              ),
+            ],
           ),
-        ],
-      ),
-    ) ?? false;
+        ) ??
+        false;
   }
 
   void _showSuccessSnackbar(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 2),
-      ),
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
     );
   }
 }
@@ -723,7 +872,9 @@ class _ModeOptionTile extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isSelected ? modeDesc.color : AppTheme.divider.withAlpha((0.3 * 255).toInt()),
+          color: isSelected
+              ? modeDesc.color
+              : AppTheme.divider.withAlpha((0.3 * 255).toInt()),
           width: isSelected ? 2 : 1,
         ),
       ),
@@ -792,11 +943,7 @@ class _ModeOptionTile extends StatelessWidget {
 
                   // 选择标记
                   if (isSelected)
-                    Icon(
-                      Icons.check_circle,
-                      color: modeDesc.color,
-                      size: 24,
-                    ),
+                    Icon(Icons.check_circle, color: modeDesc.color, size: 24),
                 ],
               ),
             ],
@@ -826,10 +973,7 @@ class _ModeOptionTile extends StatelessWidget {
                   child: Icon(modeDesc.icon, color: modeDesc.color, size: 24),
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  '模式详情',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                Text('模式详情', style: Theme.of(context).textTheme.titleMedium),
               ],
             ),
             const SizedBox(height: 16),
@@ -837,10 +981,7 @@ class _ModeOptionTile extends StatelessWidget {
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 8),
-            const Text(
-              '适用场景:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            const Text('适用场景:', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
             _getModeUsageTips(modeDesc.mode),
           ],
@@ -907,18 +1048,16 @@ class _CalibrationPanel extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: (accentColor ?? AppTheme.brandPurple).withAlpha((0.3 * 255).toInt()),
+          color: (accentColor ?? AppTheme.brandPurple).withAlpha(
+            (0.3 * 255).toInt(),
+          ),
         ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            title,
-            const SizedBox(height: 12),
-            body,
-          ],
+          children: [title, const SizedBox(height: 12), body],
         ),
       ),
     );
@@ -930,20 +1069,36 @@ class _CalibrationPanel extends StatelessWidget {
       accentColor: AppTheme.textSecondary,
       title: Row(
         children: [
-          const Icon(Icons.track_changes, size: 20, color: AppTheme.textSecondary),
+          const Icon(
+            Icons.track_changes,
+            size: 20,
+            color: AppTheme.textSecondary,
+          ),
           const SizedBox(width: 8),
-          Text('情绪引擎校准', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            '情绪引擎校准',
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+          ),
         ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('设备就绪，尚未校准', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary)),
+          Text(
+            '设备就绪，尚未校准',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
+          ),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: state.useBleSource ? () => state.startBaselineCalibration() : null,
+              onPressed: state.useBleSource
+                  ? () => state.startBaselineCalibration()
+                  : null,
               icon: const Icon(Icons.track_changes, size: 18),
               label: const Text('开始基线校准（7 分钟）'),
               style: ElevatedButton.styleFrom(
@@ -967,17 +1122,34 @@ class _CalibrationPanel extends StatelessWidget {
         children: [
           const Icon(Icons.track_changes, size: 20, color: Colors.orangeAccent),
           const SizedBox(width: 8),
-          Text('基线校准中', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.orangeAccent)),
+          Text(
+            '基线校准中',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Colors.orangeAccent,
+            ),
+          ),
           const Spacer(),
-          Text('${state.calmDone} / ${state.calmNeed}', style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            '${state.calmDone} / ${state.calmNeed}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LinearProgressIndicator(value: progress, backgroundColor: Colors.orange.withAlpha(30)),
+          LinearProgressIndicator(
+            value: progress,
+            backgroundColor: Colors.orange.withAlpha(30),
+          ),
           const SizedBox(height: 12),
-          Text('请保持安静放松状态，设备正在采集基线数据…', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary)),
+          Text(
+            '请保持安静放松状态，设备正在采集基线数据…',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
+          ),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
@@ -985,7 +1157,9 @@ class _CalibrationPanel extends StatelessWidget {
               onPressed: () => state.cancelCalibration(),
               icon: const Icon(Icons.cancel, size: 18, color: Colors.red),
               label: const Text('取消校准', style: TextStyle(color: Colors.red)),
-              style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.red),
+              ),
             ),
           ),
         ],
@@ -1001,20 +1175,38 @@ class _CalibrationPanel extends StatelessWidget {
         children: [
           const Icon(Icons.check_circle, size: 20, color: Colors.green),
           const SizedBox(width: 8),
-          Text('基线校准完成', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.green)),
+          Text(
+            '基线校准完成',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Colors.green,
+            ),
+          ),
         ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('基线数据已采集完毕，可进行应激诱导。', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary)),
+          Text(
+            '基线数据已采集完毕，可进行应激诱导。',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
+          ),
           const SizedBox(height: 4),
-          Text('请用户进行压力活动（如心算、回忆压力事件、阅读压力材料等），设备将同步采集应激数据。', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary)),
+          Text(
+            '请用户进行压力活动（如心算、回忆压力事件、阅读压力材料等），设备将同步采集应激数据。',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
+          ),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: state.useBleSource ? () => state.startStressInduction() : null,
+              onPressed: state.useBleSource
+                  ? () => state.startStressInduction()
+                  : null,
               icon: const Icon(Icons.warning_amber, size: 18),
               label: const Text('开始应激诱导'),
               style: ElevatedButton.styleFrom(
@@ -1029,7 +1221,9 @@ class _CalibrationPanel extends StatelessWidget {
   }
 
   Widget _buildInducingStress(BuildContext context, GlobalAppState state) {
-    final progress = state.stressNeed > 0 ? state.stressDone / state.stressNeed : 0.0;
+    final progress = state.stressNeed > 0
+        ? state.stressDone / state.stressNeed
+        : 0.0;
 
     return _buildCard(
       context: context,
@@ -1038,15 +1232,28 @@ class _CalibrationPanel extends StatelessWidget {
         children: [
           const Icon(Icons.warning_amber, size: 20, color: Colors.redAccent),
           const SizedBox(width: 8),
-          Text('应激诱导中', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.redAccent)),
+          Text(
+            '应激诱导中',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Colors.redAccent,
+            ),
+          ),
           const Spacer(),
-          Text('${state.stressDone} / ${state.stressNeed}', style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            '${state.stressDone} / ${state.stressNeed}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LinearProgressIndicator(value: progress, color: Colors.redAccent, backgroundColor: Colors.red.withAlpha(30)),
+          LinearProgressIndicator(
+            value: progress,
+            color: Colors.redAccent,
+            backgroundColor: Colors.red.withAlpha(30),
+          ),
           const SizedBox(height: 12),
           Container(
             width: double.infinity,
@@ -1058,11 +1265,25 @@ class _CalibrationPanel extends StatelessWidget {
             ),
             child: Column(
               children: [
-                Icon(Icons.psychology, size: 36, color: Colors.redAccent.withAlpha(180)),
+                Icon(
+                  Icons.psychology,
+                  size: 36,
+                  color: Colors.redAccent.withAlpha(180),
+                ),
                 const SizedBox(height: 8),
-                Text('请进行压力诱导活动', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  '请进行压力诱导活动',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 4),
-                Text('建议：连续减法心算、回忆压力事件、\n阅读压力材料等', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary)),
+                Text(
+                  '建议：连续减法心算、回忆压力事件、\n阅读压力材料等',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1074,13 +1295,17 @@ class _CalibrationPanel extends StatelessWidget {
                   onPressed: () => state.cancelCalibration(),
                   icon: const Icon(Icons.cancel, size: 18, color: Colors.red),
                   label: const Text('取消', style: TextStyle(color: Colors.red)),
-                  style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.red),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: state.useBleSource ? () => state.confirmStressDone() : null,
+                  onPressed: state.useBleSource
+                      ? () => state.confirmStressDone()
+                      : null,
                   icon: const Icon(Icons.check, size: 18),
                   label: const Text('已完成'),
                   style: ElevatedButton.styleFrom(
@@ -1106,9 +1331,19 @@ class _CalibrationPanel extends StatelessWidget {
       accentColor: color,
       title: Row(
         children: [
-          Icon(state.isStressed ? Icons.warning : Icons.check_circle, size: 20, color: color),
+          Icon(
+            state.isStressed ? Icons.warning : Icons.check_circle,
+            size: 20,
+            color: color,
+          ),
           const SizedBox(width: 8),
-          Text('情绪引擎已就绪', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, color: color)),
+          Text(
+            '情绪引擎已就绪',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -1116,7 +1351,14 @@ class _CalibrationPanel extends StatelessWidget {
               color: color.withAlpha(25),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -1124,15 +1366,27 @@ class _CalibrationPanel extends StatelessWidget {
         children: [
           Text(
             '$score',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: color),
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
           const SizedBox(width: 8),
-          Text('压力得分', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary)),
+          Text(
+            '压力得分',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
+          ),
           const Spacer(),
-          Text('推理 #${state.inferCount}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary)),
+          Text(
+            '推理 #${state.inferCount}',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
+          ),
         ],
       ),
     );
   }
 }
-

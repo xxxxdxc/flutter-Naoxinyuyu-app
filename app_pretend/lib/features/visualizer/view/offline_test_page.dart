@@ -103,10 +103,7 @@ class _OfflineTestPageState extends State<OfflineTestPage> {
       if (mounted) {
         setState(() => _isProcessing = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('处理失败: $e'),
-            backgroundColor: _errorMain,
-          ),
+          SnackBar(content: Text('处理失败: $e'), backgroundColor: _errorMain),
         );
       }
     }
@@ -180,9 +177,7 @@ class _OfflineTestPageState extends State<OfflineTestPage> {
       decoration: BoxDecoration(
         color: hasFile ? _successBg : const Color(0xFFF5F5F5),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: hasFile ? _successMain : AppTheme.divider,
-        ),
+        border: Border.all(color: hasFile ? _successMain : AppTheme.divider),
       ),
       child: Row(
         children: [
@@ -201,7 +196,9 @@ class _OfflineTestPageState extends State<OfflineTestPage> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: hasFile ? AppTheme.textPrimary : AppTheme.textSecondary,
+                    color: hasFile
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
                   ),
                 ),
                 if (_uploadResult != null)
@@ -287,11 +284,19 @@ class _OfflineTestPageState extends State<OfflineTestPage> {
         children: [
           Icon(Icons.show_chart, size: 56, color: _textHint.withAlpha(100)),
           const SizedBox(height: 12),
-          const Text('ECG 波形图区域',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: _textHint)),
+          const Text(
+            'ECG 波形图区域',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: _textHint,
+            ),
+          ),
           const SizedBox(height: 4),
-          const Text('选择 .mat 文件后将在此显示波形',
-              style: TextStyle(fontSize: 13, color: _textHint)),
+          const Text(
+            '选择 .mat 文件后将在此显示波形',
+            style: TextStyle(fontSize: 13, color: _textHint),
+          ),
         ],
       ),
     );
@@ -319,14 +324,34 @@ class _OfflineTestPageState extends State<OfflineTestPage> {
   List<(String, String, String, IconData, Color)> _buildMetricList() {
     if (_hrvResult != null) {
       return [
-        ('心率', _hrvResult!.heartRate.toStringAsFixed(1), 'BPM',
-            Icons.favorite, _errorMain),
-        ('SDNN', _hrvResult!.sdnnMs.toStringAsFixed(1), 'ms',
-            Icons.timeline, AppTheme.primaryMain),
-        ('RMSSD', _hrvResult!.rmssdMs.toStringAsFixed(1), 'ms',
-            Icons.show_chart, _successMain),
-        ('R峰数', '${_hrvResult!.rPeakCount}', '个',
-            Icons.trip_origin, _warningMain),
+        (
+          '心率',
+          _hrvResult!.heartRate.toStringAsFixed(1),
+          'BPM',
+          Icons.favorite,
+          _errorMain,
+        ),
+        (
+          'SDNN',
+          _hrvResult!.sdnnMs.toStringAsFixed(1),
+          'ms',
+          Icons.timeline,
+          AppTheme.primaryMain,
+        ),
+        (
+          'RMSSD',
+          _hrvResult!.rmssdMs.toStringAsFixed(1),
+          'ms',
+          Icons.show_chart,
+          _successMain,
+        ),
+        (
+          'R峰数',
+          '${_hrvResult!.rPeakCount}',
+          '个',
+          Icons.trip_origin,
+          _warningMain,
+        ),
       ];
     }
     return [
@@ -338,7 +363,12 @@ class _OfflineTestPageState extends State<OfflineTestPage> {
   }
 
   Widget _buildMetricCard(
-      String label, String value, String unit, IconData icon, Color color) {
+    String label,
+    String value,
+    String unit,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -361,15 +391,9 @@ class _OfflineTestPageState extends State<OfflineTestPage> {
           ),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 11,
-              color: AppTheme.textSecondary,
-            ),
+            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
           ),
-          Text(
-            unit,
-            style: TextStyle(fontSize: 10, color: _textHint),
-          ),
+          Text(unit, style: TextStyle(fontSize: 10, color: _textHint)),
         ],
       ),
     );

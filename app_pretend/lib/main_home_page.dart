@@ -40,11 +40,7 @@ class _MainHomePageState extends State<MainHomePage> {
       body: PageView(
         controller: _pageController,
         physics: const NeverScrollableScrollPhysics(), // 禁用滑动切换，避免冲突
-        children: const [
-          DashboardPage(),
-          VisualizerPage(),
-          ControllerPage(),
-        ],
+        children: const [DashboardPage(), VisualizerPage(), ControllerPage()],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,

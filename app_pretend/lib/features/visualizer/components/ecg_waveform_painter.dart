@@ -50,13 +50,21 @@ class EcgWaveformPainter extends CustomPainter {
     // 水平网格（5 条）
     for (int i = 0; i <= 4; i++) {
       final y = pad.top + (chartH / 4) * i;
-      canvas.drawLine(Offset(pad.left, y), Offset(size.width - pad.right, y), gridPaint);
+      canvas.drawLine(
+        Offset(pad.left, y),
+        Offset(size.width - pad.right, y),
+        gridPaint,
+      );
     }
 
     // 垂直网格（10 条）
     for (int i = 0; i <= 10; i++) {
       final x = pad.left + (chartW / 10) * i;
-      canvas.drawLine(Offset(x, pad.top), Offset(x, size.height - pad.bottom), gridPaint);
+      canvas.drawLine(
+        Offset(x, pad.top),
+        Offset(x, size.height - pad.bottom),
+        gridPaint,
+      );
     }
 
     // ---- 零线 ----
@@ -64,20 +72,47 @@ class EcgWaveformPainter extends CustomPainter {
       ..color = const Color(0xFFDADCE0)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
-    canvas.drawLine(Offset(pad.left, midY), Offset(size.width - pad.right, midY), zeroPaint);
+    canvas.drawLine(
+      Offset(pad.left, midY),
+      Offset(size.width - pad.right, midY),
+      zeroPaint,
+    );
 
     // ---- Y 轴标签 ----
-    _drawText(canvas, maxAbs.toStringAsFixed(2), Offset(pad.left - 6, pad.top + 2),
-        const Color(0xFF999999), 10, TextAlign.right);
-    _drawText(canvas, '0', Offset(pad.left - 6, midY + 3),
-        const Color(0xFF999999), 10, TextAlign.right);
+    _drawText(
+      canvas,
+      maxAbs.toStringAsFixed(2),
+      Offset(pad.left - 6, pad.top + 2),
+      const Color(0xFF999999),
+      10,
+      TextAlign.right,
+    );
+    _drawText(
+      canvas,
+      '0',
+      Offset(pad.left - 6, midY + 3),
+      const Color(0xFF999999),
+      10,
+      TextAlign.right,
+    );
 
     // ---- X 轴标签 ----
-    _drawText(canvas, '0s', Offset(pad.left, size.height - 2),
-        const Color(0xFF999999), 10, TextAlign.center);
-    _drawText(canvas, '${(data.length / 500).toStringAsFixed(1)}s',
-        Offset(size.width - pad.right, size.height - 2),
-        const Color(0xFF999999), 10, TextAlign.center);
+    _drawText(
+      canvas,
+      '0s',
+      Offset(pad.left, size.height - 2),
+      const Color(0xFF999999),
+      10,
+      TextAlign.center,
+    );
+    _drawText(
+      canvas,
+      '${(data.length / 500).toStringAsFixed(1)}s',
+      Offset(size.width - pad.right, size.height - 2),
+      const Color(0xFF999999),
+      10,
+      TextAlign.center,
+    );
 
     // ---- ECG 波形 ----
     final wavePaint = Paint()
@@ -109,23 +144,43 @@ class EcgWaveformPainter extends CustomPainter {
       final dashPaint = Paint()
         ..color = rPeakColor.withAlpha(80)
         ..strokeWidth = 1;
-      canvas.drawLine(Offset(x, pad.top), Offset(x, size.height - pad.bottom), dashPaint);
+      canvas.drawLine(
+        Offset(x, pad.top),
+        Offset(x, size.height - pad.bottom),
+        dashPaint,
+      );
 
       // 红点
       canvas.drawCircle(Offset(x, y), 4, Paint()..color = rPeakColor);
     }
   }
 
-  void _drawText(Canvas canvas, String text, Offset offset, Color color, double fontSize, TextAlign align) {
+  void _drawText(
+    Canvas canvas,
+    String text,
+    Offset offset,
+    Color color,
+    double fontSize,
+    TextAlign align,
+  ) {
     final tp = TextPainter(
-      text: TextSpan(text: text, style: TextStyle(color: color, fontSize: fontSize)),
+      text: TextSpan(
+        text: text,
+        style: TextStyle(color: color, fontSize: fontSize),
+      ),
       textDirection: TextDirection.ltr,
       textAlign: align,
     )..layout();
-    tp.paint(canvas, offset - Offset(
-      align == TextAlign.right ? tp.width : (align == TextAlign.center ? tp.width / 2 : 0),
-      fontSize / 2,
-    ));
+    tp.paint(
+      canvas,
+      offset -
+          Offset(
+            align == TextAlign.right
+                ? tp.width
+                : (align == TextAlign.center ? tp.width / 2 : 0),
+            fontSize / 2,
+          ),
+    );
   }
 
   @override

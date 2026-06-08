@@ -90,13 +90,13 @@ class BleService {
       switch (btState) {
         case AvailabilityState.poweredOff:
           throw BleConnectException(
-              BleConnectError.bluetoothOff, '蓝牙未开启，请先开启蓝牙');
+            BleConnectError.bluetoothOff,
+            '蓝牙未开启，请先开启蓝牙',
+          );
         case AvailabilityState.unauthorized:
-          throw BleConnectException(
-              BleConnectError.unauthorized, '蓝牙权限未授予');
+          throw BleConnectException(BleConnectError.unauthorized, '蓝牙权限未授予');
         case AvailabilityState.unsupported:
-          throw BleConnectException(
-              BleConnectError.unsupported, '此设备不支持蓝牙');
+          throw BleConnectException(BleConnectError.unsupported, '此设备不支持蓝牙');
         case AvailabilityState.poweredOn:
         // 正常，继续
         case AvailabilityState.unknown:
@@ -115,10 +115,7 @@ class BleService {
         (result) {
           final name = result.name ?? '';
           if (name.contains(targetDeviceName)) {
-            device = BluetoothDevice(
-              deviceId: result.deviceId,
-              name: name,
-            );
+            device = BluetoothDevice(deviceId: result.deviceId, name: name);
             completer.complete(device);
           }
         },
@@ -143,7 +140,9 @@ class BleService {
 
       if (device == null) {
         throw BleConnectException(
-            BleConnectError.deviceNotFound, '未找到 $targetDeviceName 设备');
+          BleConnectError.deviceNotFound,
+          '未找到 $targetDeviceName 设备',
+        );
       }
 
       final d = device!;
@@ -162,10 +161,7 @@ class BleService {
       );
 
       // 5. 连接
-      await UniversalBle.connect(
-        d.deviceId,
-        timeout: timeout,
-      );
+      await UniversalBle.connect(d.deviceId, timeout: timeout);
 
       // 6. 发现服务
       final services = await UniversalBle.discoverServices(
@@ -189,11 +185,10 @@ class BleService {
                 svc.uuid,
                 char.uuid,
               );
-              _notifySub =
-                  UniversalBle.characteristicValueStream(
-                    d.deviceId,
-                    char.uuid,
-                  ).listen(_onDataReceived);
+              _notifySub = UniversalBle.characteristicValueStream(
+                d.deviceId,
+                char.uuid,
+              ).listen(_onDataReceived);
             }
 
             if (charUuid == writeCharUuid &&
@@ -223,8 +218,7 @@ class BleService {
       await _stopScanCleanup();
       _isConnected = false;
       _stateController.add(false);
-      throw BleConnectException(
-          BleConnectError.unknown, '连接异常: $e');
+      throw BleConnectException(BleConnectError.unknown, '连接异常: $e');
     }
   }
 
@@ -278,7 +272,9 @@ class BleService {
   /// BLE Notify 数据回调
   void _onDataReceived(Uint8List data) {
     final bytes = data.toList();
-    debugPrint('[BLE] 收到原始数据 ${bytes.length} 字节: ${bytes.length > 20 ? "${bytes.sublist(0, 20).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}..." : bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
+    debugPrint(
+      '[BLE] 收到原始数据 ${bytes.length} 字节: ${bytes.length > 20 ? "${bytes.sublist(0, 20).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}..." : bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}',
+    );
     final packets = _parser.feed(bytes);
     debugPrint('[BLE] feed() 返回 ${packets.length} 个 packet');
     final controller = _packetController;
@@ -287,7 +283,9 @@ class BleService {
       return;
     }
     for (final packet in packets) {
-      debugPrint('[BLE] 分发 packet: ECG=${packet.ecgWaveform.length}点, battPct=${packet.battPct}, HRV=${packet.hasHrv}');
+      debugPrint(
+        '[BLE] 分发 packet: ECG=${packet.ecgWaveform.length}点, battPct=${packet.battPct}, HRV=${packet.hasHrv}',
+      );
       controller.add(packet);
     }
   }

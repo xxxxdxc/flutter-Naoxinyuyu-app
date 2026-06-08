@@ -13,17 +13,17 @@ class UploadResult {
   final List<double> rawData;
 
   UploadResult.fromJson(Map<String, dynamic> json)
-      : fileId = json['file_id'] as String,
-        fileName = json['file_name'] as String,
-        sampleRate = json['sample_rate'] as int,
-        numSamples = json['num_samples'] as int,
-        durationSec = (json['duration_sec'] as num).toDouble(),
-        filteredData = (json['filtered_data'] as List<dynamic>)
-            .map((e) => (e as num).toDouble())
-            .toList(),
-        rawData = (json['raw_data'] as List<dynamic>)
-            .map((e) => (e as num).toDouble())
-            .toList();
+    : fileId = json['file_id'] as String,
+      fileName = json['file_name'] as String,
+      sampleRate = json['sample_rate'] as int,
+      numSamples = json['num_samples'] as int,
+      durationSec = (json['duration_sec'] as num).toDouble(),
+      filteredData = (json['filtered_data'] as List<dynamic>)
+          .map((e) => (e as num).toDouble())
+          .toList(),
+      rawData = (json['raw_data'] as List<dynamic>)
+          .map((e) => (e as num).toDouble())
+          .toList();
 }
 
 class HrvResult {
@@ -38,18 +38,17 @@ class HrvResult {
   final double meanRrMs;
 
   HrvResult.fromJson(Map<String, dynamic> json)
-      : heartRate = (json['heart_rate'] as num).toDouble(),
-        sdnnMs = (json['sdnn_ms'] as num).toDouble(),
-        rmssdMs = (json['rmssd_ms'] as num).toDouble(),
-        lfHfRatio = (json['lf_hf_ratio'] as num).toDouble(),
-        stressIndex = (json['stress_index'] as num).toDouble(),
-        rPeakCount = json['r_peak_count'] as int,
-        rPeakIndices =
-            (json['r_peak_indices'] as List<dynamic>).cast<int>(),
-        rrIntervalsMs = (json['rr_intervals_ms'] as List<dynamic>)
-            .map((e) => (e as num).toDouble())
-            .toList(),
-        meanRrMs = (json['mean_rr_ms'] as num).toDouble();
+    : heartRate = (json['heart_rate'] as num).toDouble(),
+      sdnnMs = (json['sdnn_ms'] as num).toDouble(),
+      rmssdMs = (json['rmssd_ms'] as num).toDouble(),
+      lfHfRatio = (json['lf_hf_ratio'] as num).toDouble(),
+      stressIndex = (json['stress_index'] as num).toDouble(),
+      rPeakCount = json['r_peak_count'] as int,
+      rPeakIndices = (json['r_peak_indices'] as List<dynamic>).cast<int>(),
+      rrIntervalsMs = (json['rr_intervals_ms'] as List<dynamic>)
+          .map((e) => (e as num).toDouble())
+          .toList(),
+      meanRrMs = (json['mean_rr_ms'] as num).toDouble();
 }
 
 class AnalyzeResult {
@@ -59,11 +58,12 @@ class AnalyzeResult {
   final Interpretation interpretation;
 
   AnalyzeResult.fromJson(Map<String, dynamic> json)
-      : healthScore = (json['health_score'] as num).toDouble(),
-        avgHeartRate = (json['avg_heart_rate'] as num).toDouble(),
-        hrvStressIndex = (json['hrv_stress_index'] as num).toDouble(),
-        interpretation =
-            Interpretation.fromJson(json['interpretation'] as Map<String, dynamic>);
+    : healthScore = (json['health_score'] as num).toDouble(),
+      avgHeartRate = (json['avg_heart_rate'] as num).toDouble(),
+      hrvStressIndex = (json['hrv_stress_index'] as num).toDouble(),
+      interpretation = Interpretation.fromJson(
+        json['interpretation'] as Map<String, dynamic>,
+      );
 }
 
 class Interpretation {
@@ -72,10 +72,10 @@ class Interpretation {
   final List<String> recommendations;
 
   Interpretation.fromJson(Map<String, dynamic> json)
-      : summary = json['summary'] as String,
-        findings = (json['findings'] as List<dynamic>).cast<String>(),
-        recommendations =
-            (json['recommendations'] as List<dynamic>).cast<String>();
+    : summary = json['summary'] as String,
+      findings = (json['findings'] as List<dynamic>).cast<String>(),
+      recommendations = (json['recommendations'] as List<dynamic>)
+          .cast<String>();
 }
 
 /// Naoxinyuyu 后端 API 客户端
@@ -86,8 +86,7 @@ class ApiClient {
   final String baseUrl;
   final http.Client _client;
 
-  ApiClient({this.baseUrl = 'http://localhost:8000'})
-      : _client = http.Client();
+  ApiClient({this.baseUrl = 'http://localhost:8000'}) : _client = http.Client();
 
   /// 健康检查
   Future<bool> healthCheck() async {
@@ -120,25 +119,26 @@ class ApiClient {
     );
 
     if (bytes != null) {
-      request.files.add(http.MultipartFile.fromBytes(
-        'file',
-        bytes,
-        filename: fileName ?? 'upload.mat',
-      ));
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: fileName ?? 'upload.mat',
+        ),
+      );
     } else if (filePath != null) {
       final file = File(filePath);
       if (!file.existsSync()) {
         throw Exception('文件不存在: $filePath');
       }
-      request.files.add(
-        await http.MultipartFile.fromPath('file', filePath),
-      );
+      request.files.add(await http.MultipartFile.fromPath('file', filePath));
     } else {
       throw Exception('必须提供 bytes 或 filePath');
     }
 
-    final streamedResp =
-        await request.send().timeout(const Duration(seconds: 30));
+    final streamedResp = await request.send().timeout(
+      const Duration(seconds: 30),
+    );
     final resp = await http.Response.fromStream(streamedResp);
 
     if (resp.statusCode != 200) {

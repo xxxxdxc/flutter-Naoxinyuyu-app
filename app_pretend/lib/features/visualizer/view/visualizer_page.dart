@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../core/state/global_app_state.dart';
 import '../../../core/theme/app_theme.dart';
 import 'analysis_report_page.dart';
+import 'history_records_page.dart';
 import 'offline_test_page.dart';
 
 class VisualizerPage extends StatefulWidget {
@@ -21,7 +22,7 @@ class _VisualizerPageState extends State<VisualizerPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -34,19 +35,33 @@ class _VisualizerPageState extends State<VisualizerPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: _tabController.index == 0 ? Colors.black : Colors.white,
-        foregroundColor: _tabController.index == 0 ? Colors.white : AppTheme.textPrimary,
-        title: const Text('数据分析', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: _tabController.index == 0
+            ? Colors.black
+            : Colors.white,
+        foregroundColor: _tabController.index == 0
+            ? Colors.white
+            : AppTheme.textPrimary,
+        title: const Text(
+          '数据分析',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
             Tab(text: '实时波形'),
             Tab(text: '分析报告'),
             Tab(text: '离线测试'),
+            Tab(text: '历史记录'),
           ],
-          labelColor: _tabController.index == 0 ? Colors.white : AppTheme.primaryMain,
-          unselectedLabelColor: _tabController.index == 0 ? Colors.white70 : AppTheme.textSecondary,
-          indicatorColor: _tabController.index == 0 ? Colors.white : AppTheme.primaryMain,
+          labelColor: _tabController.index == 0
+              ? Colors.white
+              : AppTheme.primaryMain,
+          unselectedLabelColor: _tabController.index == 0
+              ? Colors.white70
+              : AppTheme.textSecondary,
+          indicatorColor: _tabController.index == 0
+              ? Colors.white
+              : AppTheme.primaryMain,
           onTap: (index) {
             setState(() {}); // 强制重建以更新AppBar颜色
           },
@@ -61,6 +76,7 @@ class _VisualizerPageState extends State<VisualizerPage>
           const AnalysisReportPage(),
           // 离线测试选项卡
           const OfflineTestPage(),
+          const HistoryRecordsPage(),
         ],
       ),
     );
@@ -100,8 +116,7 @@ class _VisualizerPageState extends State<VisualizerPage>
               ),
               _buildControlOverlay(),
               // BLE 实时数据面板
-              if (state.useBleSource)
-                _BleDataPanel(state: state),
+              if (state.useBleSource) _BleDataPanel(state: state),
             ],
           ),
         );
@@ -123,7 +138,10 @@ class _VisualizerPageState extends State<VisualizerPage>
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
-              icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause, color: Colors.white),
+              icon: Icon(
+                _isPaused ? Icons.play_arrow : Icons.pause,
+                color: Colors.white,
+              ),
               onPressed: () {
                 setState(() {
                   _isPaused = !_isPaused;
@@ -176,10 +194,34 @@ class _BleDataPanel extends StatelessWidget {
           const SizedBox(height: 4),
           Row(
             children: [
-              _hrvItem('心率', state.lastHr?.toStringAsFixed(1) ?? '--', 'BPM', Icons.favorite, Colors.pinkAccent),
-              _hrvItem('RMSSD', state.lastRmssd?.toStringAsFixed(1) ?? '--', 'ms', Icons.monitor_heart_outlined, Colors.orangeAccent),
-              _hrvItem('PNN50', state.lastPnn50?.toStringAsFixed(1) ?? '--', '%', Icons.analytics, Colors.lightBlueAccent),
-              _hrvItem('LF/HF', state.lastLfHf?.toStringAsFixed(2) ?? '--', '', Icons.show_chart, Colors.purpleAccent),
+              _hrvItem(
+                '心率',
+                state.lastHr?.toStringAsFixed(1) ?? '--',
+                'BPM',
+                Icons.favorite,
+                Colors.pinkAccent,
+              ),
+              _hrvItem(
+                'RMSSD',
+                state.lastRmssd?.toStringAsFixed(1) ?? '--',
+                'ms',
+                Icons.monitor_heart_outlined,
+                Colors.orangeAccent,
+              ),
+              _hrvItem(
+                'PNN50',
+                state.lastPnn50?.toStringAsFixed(1) ?? '--',
+                '%',
+                Icons.analytics,
+                Colors.lightBlueAccent,
+              ),
+              _hrvItem(
+                'LF/HF',
+                state.lastLfHf?.toStringAsFixed(2) ?? '--',
+                '',
+                Icons.show_chart,
+                Colors.purpleAccent,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -188,7 +230,12 @@ class _BleDataPanel extends StatelessWidget {
           const SizedBox(height: 4),
           Row(
             children: [
-              _infoItem(Icons.battery_std, '电量', '${state.batteryPct}%', state.batteryPct),
+              _infoItem(
+                Icons.battery_std,
+                '电量',
+                '${state.batteryPct}%',
+                state.batteryPct,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -202,7 +249,8 @@ class _BleDataPanel extends StatelessWidget {
   }
 
   Widget _sectionTitle(String title) {
-    return Text(title,
+    return Text(
+      title,
       style: const TextStyle(
         color: Colors.white54,
         fontSize: 11,
@@ -212,7 +260,13 @@ class _BleDataPanel extends StatelessWidget {
     );
   }
 
-  Widget _hrvItem(String label, String value, String unit, IconData icon, Color iconColor) {
+  Widget _hrvItem(
+    String label,
+    String value,
+    String unit,
+    IconData icon,
+    Color iconColor,
+  ) {
     return Expanded(
       child: Container(
         margin: const EdgeInsets.only(right: 8),
@@ -228,7 +282,10 @@ class _BleDataPanel extends StatelessWidget {
               children: [
                 Icon(icon, size: 10, color: iconColor),
                 const SizedBox(width: 4),
-                Text(label, style: const TextStyle(color: Colors.white38, fontSize: 9)),
+                Text(
+                  label,
+                  style: const TextStyle(color: Colors.white38, fontSize: 9),
+                ),
               ],
             ),
             const SizedBox(height: 2),
@@ -236,13 +293,19 @@ class _BleDataPanel extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(value,
+                Text(
+                  value,
                   style: const TextStyle(
-                    color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 if (unit.isNotEmpty)
-                  Text(' $unit', style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                  Text(
+                    ' $unit',
+                    style: const TextStyle(color: Colors.white38, fontSize: 10),
+                  ),
               ],
             ),
           ],
@@ -254,13 +317,23 @@ class _BleDataPanel extends StatelessWidget {
   Widget _infoItem(IconData icon, String label, String value, int batteryPct) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: batteryPct > 20 ? Colors.greenAccent : Colors.redAccent),
+        Icon(
+          icon,
+          size: 16,
+          color: batteryPct > 20 ? Colors.greenAccent : Colors.redAccent,
+        ),
         const SizedBox(width: 8),
-        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 12)),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white38, fontSize: 12),
+        ),
         const SizedBox(width: 8),
-        Text(value,
+        Text(
+          value,
           style: const TextStyle(
-            color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700,
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ],
@@ -308,21 +381,29 @@ class _BleDataPanel extends StatelessWidget {
             children: [
               Icon(
                 engineState == 3
-                    ? (state.isStressed ? Icons.warning_amber_rounded : Icons.sentiment_satisfied_alt)
+                    ? (state.isStressed
+                          ? Icons.warning_amber_rounded
+                          : Icons.sentiment_satisfied_alt)
                     : Icons.info_outline,
-                size: 20, color: engineColor,
+                size: 20,
+                color: engineColor,
               ),
               const SizedBox(width: 8),
-              Text('$score',
+              Text(
+                '$score',
                 style: TextStyle(
-                  color: engineColor, fontSize: 28, fontWeight: FontWeight.w900,
+                  color: engineColor,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
               const SizedBox(width: 6),
-              Text(engineLabel,
+              Text(
+                engineLabel,
                 style: TextStyle(
                   color: engineColor.withAlpha(180),
-                  fontSize: 12, fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -356,10 +437,7 @@ class _WaveformCanvas extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        CustomPaint(
-          size: Size.infinite,
-          painter: _GridPainter(),
-        ),
+        CustomPaint(size: Size.infinite, painter: _GridPainter()),
         CustomPaint(
           size: Size.infinite,
           painter: _WaveformPainter(
@@ -375,9 +453,18 @@ class _WaveformCanvas extends StatelessWidget {
           left: 16,
           child: Row(
             children: [
-              Text(title, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(width: 8),
-              Text('${sampleRate}Hz', style: TextStyle(color: color, fontSize: 12)),
+              Text(
+                '${sampleRate}Hz',
+                style: TextStyle(color: color, fontSize: 12),
+              ),
             ],
           ),
         ),
@@ -394,7 +481,7 @@ class _GridPainter extends CustomPainter {
       ..strokeWidth = 1.0;
 
     final double gridStep = 20.0;
-    
+
     for (double i = 0; i < size.width; i += gridStep) {
       canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
     }
@@ -455,7 +542,9 @@ class _WaveformPainter extends CustomPainter {
     int visiblePoints = (timeScale * sampleRate).toInt();
 
     // 从最新的数据开始往前画
-    int startIdx = data.length > visiblePoints ? data.length - visiblePoints : 0;
+    int startIdx = data.length > visiblePoints
+        ? data.length - visiblePoints
+        : 0;
     final visibleData = data.sublist(startIdx);
 
     double xStep = size.width / visiblePoints;
