@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/state/global_app_state.dart';
 import '../../../core/services/ble_service.dart';
+import '../../../core/services/dbs_ble_service.dart';
 import '../../../core/theme/app_theme.dart';
 
 class DashboardPage extends StatelessWidget {
@@ -47,8 +48,12 @@ class DashboardPage extends StatelessWidget {
         elevation: 0,
         child: Consumer<GlobalAppState>(
           builder: (context, state, _) => Icon(
-            state.isBleConnected ? Icons.bluetooth_connected : Icons.bluetooth,
-            color: state.isBleConnected ? Colors.green : AppTheme.primaryDark,
+            (state.isBleConnected || state.isDbsConnected)
+                ? Icons.bluetooth_connected
+                : Icons.bluetooth,
+            color: (state.isBleConnected || state.isDbsConnected)
+                ? Colors.green
+                : AppTheme.primaryDark,
           ),
         ),
       ),
@@ -165,17 +170,13 @@ class _DevicePanelContent extends StatefulWidget {
 }
 
 class _DevicePanelContentState extends State<_DevicePanelContent> {
-  bool _isConnecting = false;
+  bool _isHrvConnecting = false;
+  bool _isDbsConnecting = false;
 
   @override
   Widget build(BuildContext context) {
     return Consumer<GlobalAppState>(
       builder: (context, state, child) {
-        // 同步本地连接中状态与全局状态
-        if (!_isConnecting && state.isBleConnected) {
-          // 已连接，正常显示
-        }
-
         return Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -192,22 +193,14 @@ class _DevicePanelContentState extends State<_DevicePanelContent> {
                 trailing: _buildHrvTrailing(state),
               ),
               const Divider(),
-              // DBS 设备（预留）
               ListTile(
-                leading: Icon(Icons.psychology, color: Colors.grey[400]),
-                title: Text(
-                  'DBS 设备',
-                  style: TextStyle(color: Colors.grey[400]),
+                leading: const Icon(
+                  Icons.psychology,
+                  color: AppTheme.deviceDbs,
                 ),
-                subtitle: Text('预留', style: TextStyle(color: Colors.grey[500])),
-                trailing: ElevatedButton(
-                  onPressed: null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey[300],
-                    foregroundColor: Colors.grey[500],
-                  ),
-                  child: const Text('连接'),
-                ),
+                title: const Text('DBS 设备 (BLE)'),
+                subtitle: Text(_getDbsSubtitle(state)),
+                trailing: _buildDbsTrailing(state),
               ),
               const SizedBox(height: 8),
             ],
@@ -218,13 +211,25 @@ class _DevicePanelContentState extends State<_DevicePanelContent> {
   }
 
   String _getHrvSubtitle(GlobalAppState state) {
-    if (_isConnecting) return '连接中...';
+    if (_isHrvConnecting) return '连接中...';
     if (state.isBleConnected) return '已连接 (电量 ${state.batteryPct}%)';
     return '未连接';
   }
 
+  String _getDbsSubtitle(GlobalAppState state) {
+    if (_isDbsConnecting) return '连接中...';
+    if (state.isDbsConnected) {
+      final temp = state.dbsTemperatureC == null
+          ? ''
+          : ' · ${state.dbsTemperatureC!.toStringAsFixed(1)}°C';
+      return '已连接 (电量 ${state.dbsBatteryPercent}%$temp)';
+    }
+    if (state.dbsConnection.status == ConnectionStatus.error) return '连接异常';
+    return '未连接';
+  }
+
   Widget _buildHrvTrailing(GlobalAppState state) {
-    if (_isConnecting) {
+    if (_isHrvConnecting) {
       return const SizedBox(
         width: 24,
         height: 24,
@@ -237,18 +242,32 @@ class _DevicePanelContentState extends State<_DevicePanelContent> {
     );
   }
 
+  Widget _buildDbsTrailing(GlobalAppState state) {
+    if (_isDbsConnecting) {
+      return const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+    return ElevatedButton(
+      onPressed: () => _handleDbsToggle(state),
+      child: Text(state.isDbsConnected ? '断开' : '连接'),
+    );
+  }
+
   Future<void> _handleHrvToggle(GlobalAppState state) async {
     if (state.isBleConnected) {
       await state.disconnectBle();
       return;
     }
 
-    setState(() => _isConnecting = true);
+    setState(() => _isHrvConnecting = true);
 
     try {
       final ok = await state.startBleConnection();
       if (mounted) {
-        setState(() => _isConnecting = false);
+        setState(() => _isHrvConnecting = false);
         if (!ok) {
           ScaffoldMessenger.of(
             context,
@@ -257,17 +276,52 @@ class _DevicePanelContentState extends State<_DevicePanelContent> {
       }
     } on BleConnectException catch (e) {
       if (mounted) {
-        setState(() => _isConnecting = false);
+        setState(() => _isHrvConnecting = false);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isConnecting = false);
+        setState(() => _isHrvConnecting = false);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('连接异常: $e')));
+      }
+    }
+  }
+
+  Future<void> _handleDbsToggle(GlobalAppState state) async {
+    if (state.isDbsConnected) {
+      await state.disconnectDbs();
+      return;
+    }
+
+    setState(() => _isDbsConnecting = true);
+
+    try {
+      final ok = await state.startDbsConnection();
+      if (mounted) {
+        setState(() => _isDbsConnecting = false);
+        if (!ok) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('DBS 连接失败')));
+        }
+      }
+    } on DbsConnectException catch (e) {
+      if (mounted) {
+        setState(() => _isDbsConnecting = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isDbsConnecting = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('DBS 连接异常: $e')));
       }
     }
   }
@@ -297,9 +351,10 @@ class _DeviceCardsRow extends StatelessWidget {
               child: _DeviceCard(
                 title: 'DBS 设备',
                 icon: Icons.psychology,
-                color: Colors.grey,
-                isConnected: false,
-                battery: 0,
+                color: AppTheme.deviceDbs,
+                isConnected:
+                    state.dbsConnection.status == ConnectionStatus.connected,
+                battery: state.dbsBatteryPercent,
               ),
             ),
           ],

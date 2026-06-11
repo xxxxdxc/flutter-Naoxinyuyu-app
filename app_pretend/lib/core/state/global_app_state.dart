@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../services/data_replay_service.dart';
 import '../services/ble_service.dart';
 import '../services/ble_parser.dart';
+import '../services/dbs_ble_service.dart';
+import '../services/dbs_models.dart';
 import '../services/session_history_service.dart';
 import '../services/user_database_service.dart';
 
@@ -428,6 +430,9 @@ class GlobalAppState extends ChangeNotifier {
     if (_bleService.isConnected) {
       await disconnectBle();
     }
+    if (_dbsService.isConnected) {
+      await disconnectDbs();
+    }
     await _userDatabaseService.logout();
     _currentUser = null;
     _historySessions = [];
@@ -555,9 +560,12 @@ class GlobalAppState extends ChangeNotifier {
 
   // ========== BLE 数据源 ==========
   final BleService _bleService = BleService();
+  final DbsBleService _dbsService = DbsBleService();
   bool _useBleSource = false;
   StreamSubscription<BlePacket>? _blePacketSub;
   StreamSubscription<bool>? _bleConnSub;
+  StreamSubscription<DbsEvent>? _dbsEventSub;
+  StreamSubscription<bool>? _dbsConnSub;
   final SessionHistoryService _historyService = SessionHistoryService();
   List<SessionSummary> _historySessions = [];
   bool _isLoadingHistory = false;
@@ -565,8 +573,33 @@ class GlobalAppState extends ChangeNotifier {
   // BLE 设备信息
   bool get useBleSource => _useBleSource;
   bool get isBleConnected => _bleService.isConnected;
+  bool get isDbsConnected => _dbsService.isConnected;
   List<SessionSummary> get historySessions => _historySessions;
   bool get isLoadingHistory => _isLoadingHistory;
+
+  DbsDeviceStatus? _dbsDeviceStatus;
+  DbsSensingConfig? _dbsSensingConfig;
+  DbsStimParams? _dbsStimParams;
+  DbsRunStatus? _dbsRunStatus;
+  DbsAckEvent? _lastDbsAck;
+  DateTime? _lastDbsStressSentAt;
+  int? _lastDbsStressScore;
+  bool? _lastDbsStressState;
+  int _dbsLfpSamples = 0;
+  Timer? _dbsLfpFlushTimer;
+  final List<double> _dbsLfpBuffer = [];
+
+  DbsDeviceStatus? get dbsDeviceStatus => _dbsDeviceStatus;
+  DbsSensingConfig? get dbsSensingConfig => _dbsSensingConfig;
+  DbsStimParams? get dbsStimParams => _dbsStimParams;
+  DbsRunStatus? get dbsRunStatus => _dbsRunStatus;
+  DbsAckEvent? get lastDbsAck => _lastDbsAck;
+  int get dbsBatteryPercent =>
+      _dbsDeviceStatus?.batteryPercent ?? dbsConnection.batteryLevel ?? 0;
+  double? get dbsTemperatureC => _dbsDeviceStatus?.deviceTemperatureC;
+  bool get isDbsStimulating =>
+      _dbsRunStatus?.stimulateOn ?? stimulation.status == StimStatus.running;
+  bool get hasDbsLfpData => eegStream.waveform.isNotEmpty && isDbsConnected;
 
   // STR 引擎状态
   int _engineState = 0;
@@ -825,6 +858,128 @@ class GlobalAppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 启动 DBS BLE 连接
+  Future<bool> startDbsConnection() async {
+    dbsConnection = DeviceConnectionState(status: ConnectionStatus.connecting);
+    notifyListeners();
+
+    _dbsEventSub ??= _dbsService.eventStream.listen(
+      _onDbsEvent,
+      onError: _onDbsError,
+    );
+    _dbsConnSub ??= _dbsService.connectionStateStream.listen((connected) {
+      if (connected) {
+        dbsConnection = DeviceConnectionState(
+          status: ConnectionStatus.connected,
+          deviceId: 'DBS-BLE',
+          deviceName: _dbsService.deviceName ?? 'DBS 设备',
+          batteryLevel: dbsBatteryPercent,
+          connectedAt: DateTime.now(),
+        );
+      } else {
+        dbsConnection = DeviceConnectionState(
+          status: ConnectionStatus.disconnected,
+        );
+        _dbsLfpFlushTimer?.cancel();
+        _dbsLfpFlushTimer = null;
+        _dbsLfpBuffer.clear();
+      }
+      notifyListeners();
+    });
+
+    try {
+      final ok = await _dbsService.connect();
+      if (ok) {
+        _startDbsLfpFlushTimer();
+        eegStream = eegStream.copyWith(
+          status: StreamStatus.streaming,
+          sampleRate: _dbsSensingConfig?.lfpSampleRate ?? 1000,
+          waveform: [],
+        );
+        _dbsLfpSamples = 0;
+      }
+      notifyListeners();
+      return ok;
+    } catch (e) {
+      await _dbsEventSub?.cancel();
+      _dbsEventSub = null;
+      await _dbsConnSub?.cancel();
+      _dbsConnSub = null;
+      dbsConnection = DeviceConnectionState(status: ConnectionStatus.error);
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> disconnectDbs() async {
+    _dbsLfpFlushTimer?.cancel();
+    _dbsLfpFlushTimer = null;
+    _dbsLfpBuffer.clear();
+    await _dbsEventSub?.cancel();
+    _dbsEventSub = null;
+    await _dbsConnSub?.cancel();
+    _dbsConnSub = null;
+    await _dbsService.disconnect();
+    _lastDbsStressSentAt = null;
+    _lastDbsStressScore = null;
+    _lastDbsStressState = null;
+    dbsConnection = DeviceConnectionState(
+      status: ConnectionStatus.disconnected,
+    );
+    eegStream = eegStream.copyWith(status: StreamStatus.idle, waveform: []);
+    notifyListeners();
+  }
+
+  Future<void> sendDbsStressScore() async {
+    if (!isDbsConnected) return;
+    await _dbsService.sendStressScore(
+      DbsStressScore(
+        scoreSmoothed: _emotionScore,
+        scoreRaw: _emotionScoreRaw,
+        isStressed: _isStressed,
+        engineState: _engineState,
+        inferCount: _inferCount,
+      ),
+    );
+  }
+
+  Future<void> syncDbsStimParams({
+    required double intensityMa,
+    required double frequencyHz,
+    required double pulseWidthUs,
+  }) async {
+    await _dbsService.syncStimParams(
+      intensityMa: intensityMa,
+      frequencyHz: frequencyHz,
+      pulseWidthUs: pulseWidthUs,
+    );
+    await _dbsService.setStimulatorEnabled(true);
+    stimulation = StimulationState(
+      status: StimStatus.running,
+      intensity: intensityMa,
+      frequency: frequencyHz,
+      pulseWidth: pulseWidthUs,
+      mode: stimulation.mode,
+    );
+    notifyListeners();
+  }
+
+  Future<void> stopDbsStimulation() async {
+    await _dbsService.setStimulatorEnabled(false);
+    stimulation = stimulation.copyWith(status: StimStatus.off);
+    notifyListeners();
+  }
+
+  Future<void> setDbsSensingEnabled({
+    required bool liveEnabled,
+    required bool lfpEnabled,
+  }) async {
+    await _dbsService.setSensingEnabled(
+      liveEnabled: liveEnabled,
+      lfpEnabled: lfpEnabled,
+    );
+  }
+
   /// 发送 BLE 控制命令
   Future<void> sendBleCommand(String cmd) async {
     await _bleService.sendCommand(cmd);
@@ -954,6 +1109,79 @@ class GlobalAppState extends ChangeNotifier {
       updateMoodState(moodValue);
     }
 
+    _maybeForwardStressScoreToDbs();
+
+    notifyListeners();
+  }
+
+  void _maybeForwardStressScoreToDbs() {
+    if (!isDbsConnected || _engineState != 3) return;
+
+    final now = DateTime.now();
+    final score = (_emotionScore * 100).round().clamp(0, 100);
+    final changed =
+        _lastDbsStressScore != score || _lastDbsStressState != _isStressed;
+    final heartbeatDue =
+        _lastDbsStressSentAt == null ||
+        now.difference(_lastDbsStressSentAt!) >= const Duration(seconds: 1);
+
+    if (!changed && !heartbeatDue) return;
+
+    _lastDbsStressSentAt = now;
+    _lastDbsStressScore = score;
+    _lastDbsStressState = _isStressed;
+    unawaited(sendDbsStressScore());
+  }
+
+  void _onDbsEvent(DbsEvent event) {
+    if (event is DbsDeviceStatus) {
+      _dbsDeviceStatus = _dbsDeviceStatus == null
+          ? event
+          : _dbsDeviceStatus!.merge(event);
+      dbsConnection = dbsConnection.copyWith(
+        status: ConnectionStatus.connected,
+        batteryLevel: dbsBatteryPercent,
+      );
+    } else if (event is DbsSensingConfig) {
+      _dbsSensingConfig = event;
+      final rate = event.lfpSampleRate ?? event.liveSampleRate;
+      if (rate != null) {
+        eegStream = eegStream.copyWith(sampleRate: rate);
+      }
+    } else if (event is DbsStimParams) {
+      _dbsStimParams = event;
+      stimulation = stimulation.copyWith(
+        intensity: event.intensity,
+        frequency: event.frequencyHz,
+        pulseWidth: event.pulseWidthUs,
+      );
+    } else if (event is DbsRunStatus) {
+      _dbsRunStatus = event;
+      if (event.stimulateOn != null) {
+        stimulation = stimulation.copyWith(
+          status: event.stimulateOn! ? StimStatus.running : StimStatus.off,
+        );
+      }
+    } else if (event is DbsStreamData) {
+      if (event.firstChannelSamples.isNotEmpty) {
+        _dbsLfpBuffer.addAll(event.firstChannelSamples);
+        _dbsLfpSamples += event.firstChannelSamples.length;
+        if (eegStream.sampleRate != event.sampleRate) {
+          eegStream = eegStream.copyWith(sampleRate: event.sampleRate);
+        }
+      }
+    } else if (event is DbsAckEvent) {
+      _lastDbsAck = event;
+    }
+    notifyListeners();
+  }
+
+  void _onDbsError(Object errorObject) {
+    error = ErrorState(
+      level: ErrorLevel.warning,
+      code: 'DBS_BLE',
+      message: errorObject.toString(),
+    );
     notifyListeners();
   }
 
@@ -1027,6 +1255,31 @@ class GlobalAppState extends ChangeNotifier {
     });
   }
 
+  void _startDbsLfpFlushTimer() {
+    _dbsLfpFlushTimer?.cancel();
+    _dbsLfpFlushTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+      if (_dbsLfpBuffer.isEmpty || !isDbsConnected) return;
+
+      final newWave = List<double>.from(eegStream.waveform)
+        ..addAll(_dbsLfpBuffer);
+      _dbsLfpBuffer.clear();
+
+      final maxSamples = (eegStream.sampleRate * 10).toInt();
+      if (newWave.length > maxSamples) {
+        newWave.removeRange(0, newWave.length - maxSamples);
+      }
+
+      eegStream = eegStream.copyWith(
+        status: StreamStatus.streaming,
+        waveform: newWave,
+        duration: Duration(
+          milliseconds: (_dbsLfpSamples * 1000 ~/ eegStream.sampleRate),
+        ),
+      );
+      notifyListeners();
+    });
+  }
+
   /// 获取瞬时心率（最近一次值）
   double? get currentHeartRate {
     if (_recentHeartRates.isEmpty) return null;
@@ -1058,11 +1311,15 @@ class GlobalAppState extends ChangeNotifier {
     _replayService.dispose();
     unawaited(_historyService.finishSession());
     _batchFlushTimer?.cancel();
+    _dbsLfpFlushTimer?.cancel();
     _ecgSub?.cancel();
     _hrSub?.cancel();
     _blePacketSub?.cancel();
     _bleConnSub?.cancel();
+    _dbsEventSub?.cancel();
+    _dbsConnSub?.cancel();
     _bleService.dispose();
+    _dbsService.dispose();
     super.dispose();
   }
 

@@ -119,8 +119,8 @@ class _ControllerPageState extends State<ControllerPage> {
                       const SizedBox(height: 4),
                       Text(
                         _isManualMode
-                            ? '手动控制 - 所有参数可编辑'
-                            : '自动模式 - 参数由算法控制，可设置安全上限',
+                            ? '手动控制 - 参数将下发至 DBS'
+                            : '自动模式 - 胸环压力得分将直接转发给 DBS',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -269,25 +269,30 @@ class _ControllerPageState extends State<ControllerPage> {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               final state = context.read<GlobalAppState>();
-              state.updateStimulation(
-                StimulationState(
-                  status: StimStatus.running,
-                  intensity: _intensity,
-                  frequency: _frequency,
-                  pulseWidth: _pulseWidth,
-                  mode: _currentMode ?? TreatmentMode.manual, // 保持当前模式
-                ),
-              );
-              Navigator.pop(context);
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('参数下发成功')));
-              setState(() {
-                _isDirty = false;
-                _isLocked = true;
-              });
+              try {
+                await state.syncDbsStimParams(
+                  intensityMa: _intensity,
+                  frequencyHz: _frequency,
+                  pulseWidthUs: _pulseWidth,
+                );
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('DBS 参数下发成功')));
+                setState(() {
+                  _isDirty = false;
+                  _isLocked = true;
+                });
+              } catch (e) {
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('DBS 参数下发失败: $e')));
+              }
             },
             child: const Text('确认下发'),
           ),
@@ -300,6 +305,7 @@ class _ControllerPageState extends State<ControllerPage> {
   Widget build(BuildContext context) {
     // 确保状态同步
     final globalState = context.read<GlobalAppState>();
+    final isDbsConnected = context.watch<GlobalAppState>().isDbsConnected;
     final currentStimulation = globalState.stimulation;
 
     // 如果本地状态未初始化或与全局状态不同步，更新它
@@ -553,10 +559,10 @@ class _ControllerPageState extends State<ControllerPage> {
               icon: const Icon(Icons.sync),
               label: const Text('同步至设备'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _isDirty && _isManualMode
+                backgroundColor: _isDirty && _isManualMode && isDbsConnected
                     ? AppTheme.primaryMain
                     : AppTheme.divider.withAlpha((0.5 * 255).toInt()),
-                foregroundColor: _isDirty && _isManualMode
+                foregroundColor: _isDirty && _isManualMode && isDbsConnected
                     ? Colors.white
                     : AppTheme.textSecondary,
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -564,7 +570,8 @@ class _ControllerPageState extends State<ControllerPage> {
                   borderRadius: BorderRadius.circular(30),
                 ),
               ),
-              onPressed: _isManualMode && _isDirty && !_isLocked
+              onPressed:
+                  _isManualMode && _isDirty && !_isLocked && isDbsConnected
                   ? () => _syncParams(context)
                   : null,
             ),
@@ -573,7 +580,7 @@ class _ControllerPageState extends State<ControllerPage> {
             // E-STOP Button
             Consumer<GlobalAppState>(
               builder: (context, state, _) {
-                final bool canEstop = state.isBleConnected;
+                final bool canEstop = state.isDbsConnected;
                 return ElevatedButton.icon(
                   icon: const Icon(Icons.warning_amber_rounded),
                   label: const Text('紧急停止 (E-STOP)'),
@@ -588,13 +595,19 @@ class _ControllerPageState extends State<ControllerPage> {
                     ),
                   ),
                   onPressed: canEstop
-                      ? () {
-                          state.updateStimulation(
-                            StimulationState(status: StimStatus.off),
-                          );
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('已发送紧急停止指令')),
-                          );
+                      ? () async {
+                          try {
+                            await state.stopDbsStimulation();
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('已发送 DBS 紧急停止指令')),
+                            );
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('DBS 急停发送失败: $e')),
+                            );
+                          }
                         }
                       : null,
                 );

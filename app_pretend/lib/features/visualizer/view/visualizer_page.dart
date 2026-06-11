@@ -116,7 +116,8 @@ class _VisualizerPageState extends State<VisualizerPage>
               ),
               _buildControlOverlay(),
               // BLE 实时数据面板
-              if (state.useBleSource) _BleDataPanel(state: state),
+              if (state.useBleSource || state.isDbsConnected)
+                _BleDataPanel(state: state),
             ],
           ),
         );
@@ -228,14 +229,38 @@ class _BleDataPanel extends StatelessWidget {
           // === 板块二：设备信息 ===
           _sectionTitle('设备信息'),
           const SizedBox(height: 4),
-          Row(
+          Wrap(
+            spacing: 16,
+            runSpacing: 8,
             children: [
-              _infoItem(
-                Icons.battery_std,
-                '电量',
-                '${state.batteryPct}%',
-                state.batteryPct,
-              ),
+              if (state.useBleSource)
+                _infoItem(
+                  Icons.monitor_heart_outlined,
+                  '胸环',
+                  '${state.batteryPct}%',
+                  state.batteryPct,
+                ),
+              if (state.isDbsConnected)
+                _infoItem(
+                  Icons.psychology,
+                  'DBS',
+                  '${state.dbsBatteryPercent}%',
+                  state.dbsBatteryPercent,
+                ),
+              if (state.isDbsConnected)
+                _plainInfoItem(
+                  Icons.thermostat,
+                  '温度',
+                  state.dbsTemperatureC == null
+                      ? '--'
+                      : '${state.dbsTemperatureC!.toStringAsFixed(1)}°C',
+                ),
+              if (state.isDbsConnected)
+                _plainInfoItem(
+                  Icons.bolt,
+                  '刺激',
+                  state.isDbsStimulating ? '运行' : '停止',
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -316,12 +341,36 @@ class _BleDataPanel extends StatelessWidget {
 
   Widget _infoItem(IconData icon, String label, String value, int batteryPct) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
           icon,
           size: 16,
           color: batteryPct > 20 ? Colors.greenAccent : Colors.redAccent,
         ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white38, fontSize: 12),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _plainInfoItem(IconData icon, String label, String value) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: Colors.lightBlueAccent),
         const SizedBox(width: 8),
         Text(
           label,
