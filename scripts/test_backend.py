@@ -30,7 +30,7 @@ body = (
 )
 
 req = urllib.request.Request(
-    'http://127.0.0.1:8000/api/upload',
+    'http://127.0.0.1:8000/api/v1/files/mat',
     data=body,
     headers={'Content-Type': f'multipart/form-data; boundary={boundary}'}
 )
@@ -41,7 +41,7 @@ print(f'Upload: id={fid[:8]}... samples={d["num_samples"]} @{d["sample_rate"]}Hz
 
 # HRV
 req2 = urllib.request.Request(
-    'http://127.0.0.1:8000/api/hrv',
+    'http://127.0.0.1:8000/api/v1/analysis/hrv',
     data=json.dumps({'file_id': fid}).encode(),
     headers={'Content-Type': 'application/json'}
 )
@@ -53,7 +53,7 @@ print(f'     RR intervals (first 3): {[round(x,1) for x in h["rr_intervals_ms"][
 
 # Analyze
 req3 = urllib.request.Request(
-    'http://127.0.0.1:8000/api/analyze',
+    'http://127.0.0.1:8000/api/v1/analysis/report',
     data=json.dumps({'file_id': fid}).encode(),
     headers={'Content-Type': 'application/json'}
 )
