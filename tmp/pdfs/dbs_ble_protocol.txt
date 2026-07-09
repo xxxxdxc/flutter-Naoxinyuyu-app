@@ -1,0 +1,846 @@
+                                   脑机接口蓝牙通信协议总表
+                                      （植入式刺激器版本）
+
+
+蓝牙服务
+
+蓝牙服务列表
+   Service             Character                       UUID                     Properties
+ DBS Service                           6e400XX1-b5a3-f393-e0a9-e50e24dcca9f
+                      Write Config     6e400XX2-b5a3-f393-e0a9-e50e24dcca9f       Write
+
+                     Device Notify     6e400XX3-b5a3-f393-e0a9-e50e24dcca9f       Notify
+
+                      Stream Data      6e400XX4-b5a3-f393-e0a9-e50e24dcca9f       Notify
+
+                      Storage Data     6e400XX5-b5a3-f393-e0a9-e50e24dcca9f       Notify
+
+ Secure DFU                                            0xFE59
+   Service           Buttonless DFU                                              Indicate,
+                                        8ec90003-f315-4f60-9fb8-838830daea50
+                                                                                  Write
+
+
+设备类型
+                      Device Type                                  UUID Code
+                       植入式刺激器                                        0x00
+注：本文档仅涵盖植入式刺激器(0x00)相关协议。
+
+
+服务解释
+DBS Service：
+
+Write Config：下发控制和查询指令，支持 Write Request 和 Write Command 写方式。Write
+Request 支持返回错误码，0x00 表示正确处理，0x80~0x9F 表示存在错误。
+
+     GATT Status Code                     Status                      Comment
+              0x00                       Success                      操作成功
+              0x80                     Format Error             格式错误，数据长度或量程有误
+              0x81                      Flash Error             存储错误，掉电后会恢复初始值
+              0x82                      State Error             状态错误，此时不允许切换该状态
+               TBD
+
+- Device Notify：控制指令回复及设备主动上报状态，支持 Notify 方式。
+- Stream Data：上传实时数据，支持 Notify 方式。
+
+- Storage Data：上传存储数据，支持 Notify 方式。
+
+Secure DFU Service：
+
+- Buttonless DFU：Nordic 固件升级相关的服务，请参阅相关文档。
+
+
+
+蓝牙配对参数
+
+广播包格式
+
+
+
+   AD Type             Field          Length    Type            Value              Device
+ Complete List
+  of 128-bit
+ Service UUIDs
+ Manufacturer    Company Identifier   2 Bytes   u16          0x0059(Fix)            全部
+     Data           Device Type       1 Byte     u8        See Device Type        植入式刺激器
+                 Battery Percentage   1 Byte     u8             0~100             植入式刺激器
+                  Charge Indicator    1 Byte     u8    0-No Charging 1-Charging   植入式刺激器
+                   Charge Voltage     2 Bytes   u16        1mV Resolution         植入式刺激器
+                   Charge Current     2 Bytes   u16        1mA Resolution         植入式刺激器
+                 Device Temperature   2 Bytes   i16        0.1°C Resolution       植入式刺激器
+                    Device Error      2 Bytes   u16           Default 0           植入式刺激器
+                   MP2710 Reg08       1 Byte     u8                               植入式刺激器
+
+                   MP2710 Reg09       1 Byte     u8                               植入式刺激器
+
+                   MP2710 Reg02       1 Byte     u8                               植入式刺激器
+
+Device Type：设备类型，0x00 表示植入式刺激器。
+
+Charge Indicator：充电指示，0 为未充电，1 为正在充电。
+
+Charge Voltage：充电电压，有效值为 0~65535，单位 mV。
+
+Charge Current：充电电流，有效值为 0~65535，单位 mA。
+
+Device Temperature：设备温度，有效值为-550~1500，单位 0.1°C。
+Device Error：设备错误代码，不同的 Bit 置位表示不同的错误类型。
+
+MP2710 Reg08：充电芯片寄存器 08 运行信息。
+
+MP2710 Reg09：充电芯片寄存器 09 故障信息。
+
+MP2710 Reg02：充电芯片寄存器 02 的值（ICC）。
+
+以上各段数据均为小端模式。
+
+
+广播发送模式
+- 设备在未连接状态，将会发送可连接广播。
+
+- 设备在已连接状态，将会发送不可连接广播。
+
+- 设备在充电状态下，将会以 100ms 的间隔发送广播；未充电状态下，将会以 1000ms 的间隔发送
+广播。
+
+- 设备在发送 Stream Data 时，将暂停广播，以降低丢包率。
+
+
+连接参数
+Central 和 Peripheral 在连接时会交换连接参数，为了提高传输速率，Central 应尽量满足
+Peripheral 提供的 Preferred Connection Parameters。
+
+            Connection Parameter                   Value
+    Minimum Acceptable Connection Interval         15ms
+    Maximum Acceptable Connection Interval         15ms
+                Slave Latency                        30
+        Connection Supervisory Timeout            4000ms
+               Gap Data Length                    251 bytes
+             Maximum MTU Size                     247 bytes
+                Preferred PHY                      LE 2M
+蓝牙配对流程
+
+
+
+
+- App 与设备通过蓝牙 4.2 以上的 LESC 方式进行配对，获得基础安全连接。
+
+- App 检查设备是否存在密钥，如果不存在，则向设备发送 32 字节的 Secret Key 和 4 字节的 Adata，
+用于 App 合法性验证与数据的加解密。
+
+- App 检查设备是否信任该 App，如果 App 未与设备建立信任，则需要经过合法性验证。具体方式
+为：App 首先通过 ECDH 算法，生成一把私钥与公钥，然后将公钥发送给设备；设备通过相同算法生
+成自己的私钥与公钥，将公钥发送给 App；App 和设备通过对方的公钥，计算出共享密钥；App 使
+用 HMAC-SHA256 算法，使用共享密钥，对 Secret Key 计算摘要，将摘要发送给设备进行验证；通
+过验证后，设备将 App 加入信任列表。
+- 如果设备对应用层数据没有加密需求，可以跳过合法性验证流程。
+
+
+
+数据包
+
+数据包格式
+     Frame                 Field                Size         Value          Description
+  Frame Control          Preamble              1 byte        0xA5              Fixed
+                      Rolling Counter          4 bits        0~15       Filter repeated frame
+                    Encryption Enabled          1 bit         0,1      0-Disabled 1-Enabled
+                   Acknowledge Request          1 bit         0,1           0-No 1-Yes
+                         Reserved              2 bits                  Reserved for future use
+
+                         Command               1 byte      0x00~0xFF     Specific action set
+  Data Header       Timestamp in millis      6 bytes (1)
+
+                        Total Packet           1 byte      0x01~0xFF
+
+                      Current Packet           1 byte      0x01~0xFF
+
+                        Data Length            1 byte                  0~232 if not encrypted
+                                                                         0~204 if encrypted
+      Data           Protocol Data Unit       n bytes
+
+   (Optional)     Authentication Signature    28 bytes                 Included if encryption
+                                                                              enabled
+注：所有超过 1 字节的字段使用大端序（Big-Endian）传输。
+字段解释
+   Frame                      Field                              Explanation
+Frame Control               Preamble         前导码，用于识别特定的数据类型。前导码不匹配的数据包，直接
+                                             丢弃，以免解析错误。
+                         Rolling Counter     滚动计数器，每次发送一帧数据自增 1，到达上限后翻转为 0。终
+                                             端和上位机各自维护计数器，当连续收到相同计数值的数据包，则
+                                             丢弃后面的数据包。
+                    Encryption Enabled       加密位，若启用，则加密 Data Header 和 Data 区的数据，并额外
+                                             附带 Authentication Signature 内容。
+                   Acknowledge Request       应答位，若为是，则此条数据包期望得到对方的答复。
+                            Reserved         保留位。
+                           Command           控制指令，每个控制指令是由一系列操作指令组成的合集。
+ Data Header            Timestamp in ms      时间戳，自 1970 年 1 月 1 日 0 时 0 分 0 秒到现在经过的毫秒数。
+                                             前 4 字节保存秒数，后 2 字节保存毫秒数。时间戳在加密后用于对
+                                             抗重放攻击。
+                           Total Packet      总包数，如果要传输的数据内容超过一个蓝牙包所能承载的上限，
+                                             则需要分包传输，每个分包都要使用该 Frame 格式。
+                         Current Packet      当前分包。
+                           Data Length       Data 区的长度，不包含 Frame Control，Data Header 和
+                                             Optional。
+    Data                Protocol Data Unit   协议数据单元（简称 PDU），每个 PDU 是一个最小操作指令。一
+                                             个 Data 区可能包含 0 个至多个 PDU。
+  Optional        Authentication Signature   认证签名，当加密位启用，Data Header 和 Data 区的数据会被加
+                                             密，需要使用私钥和认证签名解密数据。
+注：加密位在需要进行合法性验证的设备上默认启用，除了安全状态查询、安全状态配置和传输流式数据。
+
+
+
+
+协议数据单元(PDU)
+             Opcode                           PDU Length                       PDU Data
+               1 byte                            2 bytes                        n bytes
+Opcode：原子操作码，每条命令的最小执行单元。
+
+PDU Length：协议数据长度，不包含 opcode 和自身。数据内容可以为空，此时长度为 0。
+
+PDU Data：协议数据内容，超过单条蓝牙包长度的，在下个分包中继续传输，而不需要重复 opcode
+和 PDU length。
+使用 PDU 格式的数据，方便控制指令扩展操作码时的向前兼容性。
+
+
+
+认证签名
+       Field           Mac         Nonce
+       Length         16 bytes     12 bytes
+控制指令
+
+指令速查
+
+
+
+  Command        Opcode    Description    Device   备注
+Write Config &
+ Device Notify
+     0x00                  开发者配置         植入式刺激器
+
+                  0x00    恢复出厂设置
+
+                  0x01      设备重启
+
+                  0x02      清除绑定
+
+                  0x03      清除私钥
+
+                  0x04     清除 FLASH
+
+     0x01                 安全状态查询         植入式刺激器
+
+                  0x00     安全校验值
+
+     0x02                 安全状态配置         植入式刺激器
+
+                  0x00      传输私钥
+
+                  0x01    传输 ECDH 公钥
+
+                  0x02      验证私钥
+
+     0x03                 本机状态查询         植入式刺激器
+
+                  0x00      硬件版本
+
+                  0x01      固件版本
+
+                  0x02      本地时间
+
+                  0x03      电池电量
+
+                  0x04      充电指示
+
+                  0x05      充电电流
+
+                  0x06      充电电压
+
+                  0x07      激活时间
+
+                  0x08      设备温度
+
+                  0x09      电池循环
+
+                  0x0A      进水状态
+         0x0D           设备类型
+
+0x04                  用户数据查询          植入式刺激器
+
+         0x00           患者编号
+
+         0x01           患者姓名
+
+         0x02           患者性别
+
+         0x03           患者生日
+
+         0x04         患者操作权限
+
+         0x05          刺激器位置
+
+         0x06           电极类型
+
+         0x07           通道索引
+
+         0x08         导线位置名称
+
+         0x09           充电速度
+
+0x05                  用户数据配置          植入式刺激器
+
+       0x00~0x09    参考 Command 0x04
+
+0x06                  感测参数查询          植入式刺激器
+
+         0x00        实时感测通道索引
+
+         0x01         实时感测频率
+
+         0x02       实时感测滤波器带宽
+
+         0x03         频谱图频段标记
+
+         0x04        LFP 感测通道索引
+
+         0x05         LFP 感测频率
+
+         0x06        LFP 感测滤波器带宽
+
+0x07                  感测参数配置          植入式刺激器
+
+       0x00~0x02    参考 Command 0x06
+
+0x08                  刺激参数查询          植入式刺激器
+
+         0x00         刺激编程组号
+
+         0x01           刺激方式
+
+         0x02           刺激频率
+
+         0x03         刺激触点对数
+
+         0x04         刺激触点序号
+
+         0x05         刺激电流/电压
+
+         0x06           刺激脉宽
+
+         0x07      极性对称波形之间的时间间隔
+
+         0x08          软起动时间
+         0x09        循环刺激间隔
+
+         0x0A          主动放电
+
+         0x0B        刺激编程组名
+
+         0x0C         刺激程序组
+
+0x09                 刺激参数配置          植入式刺激器
+
+       0x00~0x0C   参考 Command 0x08
+
+0x0A                 控制参数查询          植入式刺激器   TBD
+
+         TBD
+
+0x0B                 控制参数配置          植入式刺激器   TBD
+
+         TBD
+
+0x0C                 运行模式查询          植入式刺激器
+
+         0x00          综合开关
+
+         0x01        当前刺激编程组
+
+         0x02       感测数据上传开关
+
+         0x03       存储数据上传开关
+
+         0x04      运输(Shipping)模式
+
+         0x05      编程组定时切换配置
+
+         0x06      编程组定时切换开关
+
+         0x07        实时感测开关
+
+         0x08         刺激器开关
+
+         0x09        阻抗测量开关
+
+         0x0A         控制器开关
+
+         0x0B         LFP 感测开关
+
+0x0D                 运行模式配置          植入式刺激器
+
+       0x00~0x0A   参考 Command 0x0C
+
+0x0E                 阻抗测试选项          植入式刺激器
+
+         0x00       单端阻抗测试结果
+
+         0x01        阻抗通道索引
+
+         0x02        阻抗自测间隔
+
+         0x04       同步历史阻抗结果
+
+         0x11       差分阻抗测试结果
+
+0x0F                    保留
+
+0x10                 存储数据选项          植入式刺激器
+
+         0x00      存储数据同步开始/结束
+                       0x01      神经标记物同步开始/结束
+
+                       0x02      电源事件同步开始/结束
+
+     0x11                          感测刺激配置          植入式刺激器
+
+                     0x01~0x0B   参考 Command 0x08
+
+  Stream Data
+
+     0xC0                          实时数据上传          植入式刺激器
+
+                       0x00
+
+  Storage Data
+
+     0xE0                          存储数据上传          植入式刺激器
+
+                       0x00        神经标记物同步
+
+                       0x01        电源事件同步
+
+
+Command 0x00 开发者配置
+App->Dev
+
+            Opcode                  Length               Data
+             0x00                      0             Factory Reset
+             0x01                      0             Reboot Device
+             0x02                      0            Remove Bonding
+             0x03                      0           Remove Private Key
+             0x04                      0               Clear Flash
+0x00：恢复出厂设置，设备将清除所有内容（绑定，密钥，配置信息，运行状态，FLASH），并重启。
+APP 端必须同步解除与设备的绑定，否则将无法再次进入配对流程。
+
+0x01：设备重启，设备将重启。
+
+0x02：清除绑定，设备将清除绑定信息，并重启。清除绑定后，APP 端必须同步解除与设备的绑定，
+否则将无法再次进入配对流程。
+
+0x03：清除私钥，设备将清除密钥，并重启。
+
+0x04：清除 FLASH，设备将清除 FLASH 内容（配置信息，运行状态），并重启。
+Command 0x01 安全状态查询
+Dev->App
+
+ Opcode          Length             Data
+
+  0x00             1             Private Key                         App Trusted                 Reserved
+                                    bit 0                               bit 1                      bit 2-7
+                          0-Dev no key 1-Dev has key      0-App not trusted 1-App trusted
+
+
+Command 0x02 安全状态配置
+App->Dev
+
+App 主动发起安全状态配置指令，必须逐条发送，不允许将多个 opcode 组合在一个数据包内发送。
+
+         Opcode                   Length                      Data
+
+          0x00                      36                     Secret Key                    Adata
+                                                            32 bytes                    4 bytes
+          0x01                      64                   ECDH Public Key
+
+                                                            64 bytes
+
+          0x02                      32                 HMAC-SHA256 Digest
+
+                                                            32 bytes
+
+传输私钥操作（0x00）在整个设备生命周期只进行一次，设备会将密钥写入到存储，后续不允许更新。
+App 需要将私钥以合适的方式存储，不得泄露和丢失。如果 App 查询到设备拥有私钥，则跳过传输
+私钥操作。如果 App 查询到设备已信任该 App，则不需要进行后续安全状态配置。
+
+Dev->App
+
+            Opcode                             Length                                Data
+             0x00                                1                              0-Success 1-Fail
+             0x01                                64                             ECDH Public Key
+             0x02                                1                              0-Success 1-Fail
+设备在完成所有操作后，会将 App 加入可信列表，此时才能进行所有后续指令的交互。否则，设备将
+不会应答 App 任何内容。
+Command 0x03 本机状态查询
+Dev->App
+
+ Opcode    Length             Data             Data Type   Active Report
+                                                             Strategy
+  0x00       4         Hardware Version          string        None
+  0x01       6          Firmware Version         string        None
+  0x02       6          Local Timestamp        u32 + u16       None
+  0x03       1         Battery Percentage         u8          Change
+  0x04       1          Charge Indicator          u8          Change
+  0x05       2           Charge Current           u16         Change
+  0x06       2           Charge Voltage           u16         Change
+  0x07       6         Activate Timestamp      u32 + u16       None
+  0x08       2        Device Temperature          i16         Change
+  0x09       2            Battery Cycle           u16          None
+  0x0A       1       Water Ingress Detection      u8          Change
+  0x0D       1            Device Type             u8           None
+0x00：硬件版本，格式为"Va.b"，a 为 Major Version，b 为 Minor Version，用于 OTA 时检查固件
+兼容性。
+
+0x01：固件版本，格式为"yyyyMMdd"，具体为编译日期，用于 OTA 时检查固件兼容性。
+
+0x02：本机时间，以时间戳表示从 1970 年 1 月 1 日开始所经过的毫秒数，前 4 字节为秒，后 2 字节
+为毫秒。
+
+0x03：电量百分比，有效值为 0~100。
+
+0x04：充电指示，0 为未充电，1 为正在充电。
+
+0x05：充电电流，有效值为 0~65535，单位 mA。
+
+0x06：充电电压，有效值为 0~65535，单位 mV。
+
+0x07：激活时间，以时间戳记录设备第一次配置时间，前 4 字节为秒，后 2 字节为毫秒。
+
+0x08：设备温度，有效值为-550~1500，单位 0.1°C。
+
+0x09：电池循环，有效值为 0~65535，单位次。
+0x0A：进水状态，0 为未进水，1 为进水。
+
+0x0D：设备类型，0x00 表示植入式刺激器。
+
+注：本机状态可以由 App 端发起查询，也可以由设备端主动上报。由 App 端发起查询时，不需要指定字段，设备会上
+报所有状态；由设备端发起主动上报时，只会上报必要的字段，App 无需回复。
+
+
+Command 0x04 用户数据查询
+Dev->App
+
+  Opcode   Length                 Data               Data Type
+   0x00      4                  Patient ID              u32
+   0x01     <32               Patient Name             string
+   0x02      1               Patient Gender             u8
+   0x03      4                 Patient Birth            u32
+   0x04      4           Patient Operation Access       u32
+   0x05      1              Stimulate Location          u8
+   0x06      4               Electrode Type         u8+u8+u8+u8
+   0x07      2                Channel Index             u16
+   0x08    <128                Line Name               String
+   0x09      1                Charge Speed              u8
+0x00：患者 ID，0 表示未设置，有效值为 0x01~0xFFFFFFFF。
+
+0x01：患者姓名，使用 UTF-8 编码存储，超过长度自动截断。
+
+0x02：患者性别，0 表示未设置，1 表示男性，2 表示女性。
+
+0x03：患者生日，以时间戳表示，单位秒。
+
+0x04：患者操作权限，每个比特位表示一种权限，1 表示允许，0 表示禁止，默认 0。
+
+Bit 0 — 开启/关闭刺激权限。
+
+Bit 1 — 设置编程组 1 权限。
+
+Bit 2 — 设置编程组 2 权限。
+
+Bit 3 — 设置编程组 3 权限。
+
+Bit 4 — 设置编程组 4 权限。
+Bit 5-Bit 31 — 保留。
+
+0x05：刺激器位置，0 表示左胸，1 表示右胸，2 表示其他。
+
+0x06：电极类型，有效值为 0~255，最多 4 个位置。0 表示关闭，其它值表示开启。
+
+0x07：通道索引，bit 0~bit 15 分别代表通道 1~通道 16，1 表示开启，0 表示关闭。
+
+0x08：导线位置名称，使用 UTF-8 编码存储，超过长度自动截断。
+
+0x09：充电速度，0 为高，1 为中，2 为低，默认 0。
+
+
+Command 0x06 感测参数查询
+Dev->App
+
+ Opcode    Length                Data                 Data Type        Default
+  0x00       2       Live Sampling Channel Index          u16            0
+  0x01       2         Live Sampling Frequency            u16           1000
+  0x02       8       Live Sampling Filter Bandwidth   float + float   0.1，250.0
+  0x03       24        Spectrogram Band Marker           binary         All 0
+  0x04       2        LFP Sampling Channel Index          u16            0
+  0x05       2          LFP Sampling Frequency            u16           1000
+  0x06       8       LFP Sampling Filter Bandwidth    float + float   0.1，250.0
+0x00：实时感测通道索引，bit 0~bit 15 分别代表通道 1~通道 16，1 表示开启，0 表示关闭。
+
+0x01：实时感测频率，有效值为 1~1000，单位 Hz。
+
+0x02：实时感测滤波器带宽，第一个 float 为 Lower Bandwidth，有效值为 0.1~500；第二个 float
+为 Upper Bandwidth，有效值为 100~20000。Lower Bandwidth 不可以超过 Upper Bandwidth。
+
+0x03：频谱图频段标记，仅与 APP 同步使用。
+
+0x04：LFP 感测通道索引，含义同 0x00。
+
+0x05：LFP 感测频率，含义同 0x01。
+
+0x06：LFP 感测滤波器带宽，含义同 0x02。
+Command 0x08 刺激编程组查询
+Dev->App
+
+ Opcode    Length                    Data                  Data Type
+  0x00       1                  Stimulate Group               u8
+  0x01       1                 Stimulate Method               u8
+  0x02       2                Stimulate Frequency            u16
+  0x03       n                Stimulate Pair Count            u8
+  0x04      2*n             Stimulate Pole Number           u8 + u8
+  0x05      4*n            Stimulate Current/Voltage         float
+  0x06      4*n              Stimulate Pulse Width         u16 + u16
+  0x07       2          Interval between Symmetric Poles     u16
+  0x08       2                     Soft Start                u16
+  0x09       4                   Periodic Start            u16 + u16
+  0x0A       1                  Active Discharge              u8
+  0x0B      <32                  Group Name                 String
+  0x0C       n               Stimulate Program Set            u8
+注：n 为刺激触点对数，有效值为 1~8。
+
+
+0x00：刺激编程组号，有效值为 1~4，分别代表组 1~4。如配置为 0 则删除所有编程组。
+
+0x01：刺激方式，0 表示恒流刺激，1 表示恒压刺激。
+
+0x02：刺激频率，有效值为 2~250，单位 Hz。
+
+0x03：刺激触点对数，有效值为 1~8，如配置为 0 则删除该编程组。
+
+0x04：刺激触点序号，有效值为 0~16，0 表示 COM 端。两个 u8 分别表示两个触点的序号，顺序无
+影响。
+
+0x05：如果刺激方式为恒流刺激则表示刺激电流，有效值为 0~25.5，单位 mA；如果刺激方式为恒
+压刺激则表示刺激电压，有效值为 0~10.5，单位 V。
+
+0x06：刺激脉宽：有效值为 20~450，单位 μs。
+
+0x07：极性对称波形之间的时间间隔，常量（默认 60），单位 μs。
+
+0x08：软起动，有效值为 0/1/2/4/8，单位秒。0 表示没有软起动。
+0x09：循环刺激间隔，有效值为 0~65535，单位秒。第一个 u16 表示刺激时长，第二个 u16 表示间
+歇时长。0 表示关闭此功能。
+
+0x0A：主动放电，0 表示关闭，1 表示开启，默认开启。
+
+0x0B：刺激编程组名，使用 UTF-8 编码存储，超过长度自动截断。
+
+0x0C：刺激程序组，0 表示程序组 1（左），1 表示程序组 2（右）。
+
+
+Command 0x0C 运行状态查询
+Dev->App
+
+ Opcode    Length         Data                                     Data Type
+
+  0x00       2       Switch Bitmask                                  u16
+                      (see below)
+  0x01       1      Active Stimulate                                  u8
+                         Group
+  0x02       1       Enable Stream                                    u8
+                      Data Upload
+  0x03       1       Enable Storage                                   u8
+                      Data Upload
+  0x04       1      Enable Shipping                                   u8
+                         Mode
+  0x05     1+5*n    Schedule Count      Start   Stop   Stimulate
+                                                        Group
+                           u8           u16     u16       u8
+  0x06       1      Enable Scheduled                                  u8
+                    Stimulate Group
+  0x07       1      Live Sample Start                                 u8
+
+  0x08       1       Stimulate Start                                  u8
+
+  0x09       1      Impedance Start                                   u8
+
+  0x0A       1        Control Start                                   u8
+
+  0x0B       1      LFP Sample Start                                  u8
+
+0x00：综合开关
+
+Bit 0 — Live Sample Start：实时感测开关，1 表示开，0 表示关，未连接 App 或连接断开后自动
+关闭。
+
+Bit 1 — Stimulate Start：刺激器开关，1 表示开，0 表示关，上电默认关闭。
+Bit 2 — Impedance Start：阻抗测量开关，1 表示开，0 表示关。每日 0 时 0 分自动执行一次阻抗
+测量。
+
+Bit 3 — Control Start：控制器开关，1 表示开，0 表示关。
+
+Bit 4 — LFP Sample Start：LFP 感测开关，1 表示开，0 表示关，未连接 App 或连接断开后自动关
+闭。
+
+Bit 5~15 — 保留。
+
+0x01：当前刺激编程组，有效值为 0~4，其中 0 代表感测状态，1~4 代表具体的编程组。
+
+0x02：开启感测数据上传，1 表示开，0 表示关，每次连接上 APP 后默认关。
+
+0x03：开启存储数据上传，1 表示开，0 表示关，每次连接上 APP 后默认关。
+
+0x04：开启运输(Shipping)模式，1 表示开，0 表示关，上电默认关。
+
+0x05：编程组定时切换，格式为(Schedule Count + (Start + Stop + Stimulate Group)*n)，其中 n
+为定时组数。
+
+Schedule Count：定时组数，有效值为 1~6，0 为删除全部定时组。
+
+Start：开始时间，有效值为 0~1440，单位分。
+
+Stop：结束时间，有效值为 0~1440，单位分。
+
+Stimulate Group：启用编程组，有效值为 1~4。
+
+0x06：开启编程组定时切换，1 表示开，0 表示关。
+
+0x07：实时感测开关，1 表示开，0 表示关，未连接 App 或连接断开后自动关闭。
+
+0x08：刺激器开关，1 表示开，0 表示关，上电默认关闭。
+
+0x09：阻抗测量开关，1 表示开，0 表示关。每日 0 时 0 分自动执行一次阻抗测量。
+
+0x0A：控制器开关，1 表示开，0 表示关。
+
+0x0B：LFP 感测开关，1 表示开，0 表示关，未连接 App 或连接断开后自动关闭。
+Command 0x0E 阻抗测试选项
+Dev->App
+
+Opcode     Length          Data
+
+ 0x00        n        Timestamp in Ms    Channel Bitmask   Datapoint             Value Array
+                          6 bytes              2 bytes      1 byte        Active Channel*Datapoint*2
+                                                                                    bytes
+ 0x11        n            6 bytes              2 bytes      1 byte        Active Channel*Datapoint*2
+                                                                                    bytes
+App->Dev
+
+ Opcode      Length                     Data                  Data Type               Default
+  0x01           2            Impedance Channel Index            u16                   0xFFFF
+  0x02           4            Impedance Check Interval           u32                   86400
+  0x04           1         Synchronize Impedance Results             u8                0x01
+0x00：单端阻抗测试结果
+
+Timestamp in Ms：阻抗测试产生的时间。
+
+Channel Bitmask：通道开启表，bit 0~bit 15 分别表示通道 1~通道 16，开启的通道置 1，其他置
+0。
+
+Datapoint：阻抗测试点数，数据类型为 u8。
+
+Value Array：阻抗测试数据，只记录开启的通道，数据顺序为（ch1dp1，ch1dp2，……，ch2dp1，
+ch2dp2，……，ch16dpN），数据类型为 u16。
+
+0x11：差分阻抗测试结果
+
+Timestamp in Ms：阻抗测试产生的时间。
+
+Channel Bitmask：通道开启表，bit 0~bit 15 分别表示通道 1~通道 16，开启的通道置 1，其他置
+0。
+
+Datapoint：阻抗测试点数，数据类型为 u8。
+
+Value Array：阻抗测试数据，只记录开启的通道，数据顺序优先按每根电极上不同触点的组合，后
+按各个电极的顺序（ch1-ch2，ch1-ch3，ch1-ch4，ch2-ch3，ch2-ch4，ch3-ch4……，ch15-
+ch16），数据类型为 u16。
+0x01：阻抗通道索引，bit0~bit15 分别代表通道 1-通道 16，1 表示开启，0 表示关闭。
+
+0x02：阻抗自检间隔，有效值为 1800~86400，单位秒。
+
+0x04：同步历史阻抗结果，当 APP 发送该指令到设备，设备需将本地缓存的历史阻抗测量结果通过
+0x00 和 0x11 按条上传到 APP。最大历史阻抗缓存数量为 30 条，新的测量结果会覆盖最早的测量结
+果。传输完成后，设备会返回该相同指令。
+
+
+Command 0x10 存储数据选项
+App->Dev
+
+ Opcode     Length                     Data                Data Type        Default
+  0x00           1       Synchronize Storage Data Start        u8             0x00
+0x00：存储数据同步开始，当 APP 发送该指令到设备，设备需将本地缓存的各类数据分别上传到
+App，上传顺序为（数据 1 开始-数据 1-数据 1 结束，……数据 N 开始-数据 N-数据 N 结束-存储数据
+同步结束），如果本地无任何缓存，直接上传存储数据同步结束指令。
+
+Dev->App
+
+ Opcode     Length                     Data                Data Type        Default
+  0x00           1      Synchronize Storage Data Stop          u8             0x01
+  0x01           1     Synchronize Biomarker Start/Stop        u8          0x00/0x01
+  0x02           1    Synchronize PowerEvent Start/Stop        u8          0x00/0x01
+0x00：存储数据同步结束，当所有缓存数据上传完毕或无任何缓存数据时，发送该指令通知 App。
+
+0x01：神经标记物同步开始/结束，0x00 表示开始，0x01 表示结束。
+
+0x02：电源事件同步开始/结束，0x00 表示开始，0x01 表示结束。
+
+
+Command 0xC0 感测数据上传
+Dev->App
+
+Opcode     Length         Data
+
+ 0x00        n       Timestamp in Ms     Channel Bitmask   Datapoint       Value Array
+                         6 bytes              2 bytes       1 byte           Active
+                                                                       Channel*Datapoint*2
+                                                                              bytes
+0x00：感测结果
+Timestamp in Ms：第一个感测采样点产生的时间。
+
+Channel Bitmask：通道开启表，bit 0~bit 15 分别表示通道 1~通道 16，开启的通道置 1，其他置
+0。
+
+Datapoint：感测采样点数，数据类型为 u8。
+
+Value Array：感测采样数据，只记录开启的通道，数据顺序为（ch1dp1，ch2dp1，……，
+ch16dp1，ch1dp2，ch2dp2，……，ch16dp2，……，ch1dpN，ch2dpN，……，ch16dpN），数
+据类型为 i16。
+
+注：感测采样数据全部为大端格式。
+
+
+Command 0xE0 存储数据上传
+Dev->App
+
+ Opcode     Length        Data
+
+  0x00        n         Datapoint                   Value Array
+                         1 byte          (Timestamp + Biomarker)*Datapoint
+  0x01        n         Datapoint                   Value Array
+                         1 byte         (Timestamp + PowerEvent)*Datapoint
+0x00：神经标记物同步。最多缓存 84 条最近数据，同步结束不删除。
+
+Datapoint：神经标记物点数，数据类型为 u8。
+
+Value Array：神经标记物数据，数据顺序为（Timestamp1，Biomarker1，……，TimestampN，
+BiomarkerN）。Timestamp 为 4 字节 u32 类型，精度到秒。Biomarker 为 4 字节 float 类型。
+
+注：Biomarker 全部为大端格式。
+0x01：电源事件同步，最多缓存 10 条最近数据，同步结束不删除。
+
+Datapoint：电源事件点数，数据类型为 u8。
+
+Value Array：电源事件数据，数据顺序为（Timestamp1，PowerEvent1，……TimestampN，
+PowerEventN）。Timestamp 为 4 字节 u32 类型，精度到秒。PowerEvent 为 1 字节 u8 类型。电
+源事件见下表：
+
+             PowerEvent                        Comment
+                0x00                          进入休眠模式
+                TBD
+

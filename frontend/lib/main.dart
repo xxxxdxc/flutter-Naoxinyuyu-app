@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:ui';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -8,15 +12,30 @@ import 'features/auth/view/login_page.dart';
 import 'main_home_page.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await windowManager.ensureInitialized();
-  await windowManager.setPreventClose(true);
+  await runZonedGuarded<Future<void>>(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+        debugPrint('[FlutterError] ${details.exceptionAsString()}');
+      };
+      PlatformDispatcher.instance.onError = (error, stack) {
+        debugPrint('[PlatformError] $error');
+        debugPrintStack(stackTrace: stack);
+        return true;
+      };
 
-  runApp(
-    MultiProvider(
-      providers: buildAppProviders(),
-      child: const MyApp(),
-    ),
+      await windowManager.ensureInitialized();
+      await windowManager.setPreventClose(true);
+
+      runApp(
+        MultiProvider(providers: buildAppProviders(), child: const MyApp()),
+      );
+    },
+    (error, stack) {
+      debugPrint('[ZoneError] $error');
+      debugPrintStack(stackTrace: stack);
+    },
   );
 }
 

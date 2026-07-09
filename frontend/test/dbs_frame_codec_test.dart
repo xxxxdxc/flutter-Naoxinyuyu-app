@@ -84,6 +84,41 @@ void main() {
     expect(stream.firstChannelSamples, [100, 200]);
   });
 
+  test('decodes eight interleaved LFP channels', () {
+    final codec = DbsFrameCodec();
+    final payload = BytesBuilder(copy: false)
+      ..add(Uint8List.fromList([
+        0x65, 0x53, 0xF1, 0x00, // seconds
+        0x00, 0x7B, // millis
+        0x00, 0xFF, // ch1-ch8
+        0x03, // datapoints
+      ]));
+
+    for (var point = 0; point < 3; point++) {
+      for (var channel = 1; channel <= 8; channel++) {
+        payload.add(_i16(channel * 100 + point));
+      }
+    }
+
+    final bytes = codec.encode(
+      command: DbsProtocol.commandStreamData,
+      pdus: [DbsPdu(opcode: 0x00, data: payload.toBytes())],
+    );
+
+    final frame = codec.decodeFrame(bytes)!;
+    final stream = DbsFrameCodec.parseStreamData(frame, sampleRate: 250)!;
+
+    expect(stream.channelMask, 0x00FF);
+    expect(stream.channelSamples.keys, containsAll([1, 2, 3, 4, 5, 6, 7, 8]));
+    for (var channel = 1; channel <= 8; channel++) {
+      expect(
+        stream.channelSamples[channel],
+        [channel * 100, channel * 100 + 1, channel * 100 + 2],
+      );
+    }
+    expect(stream.firstChannelSamples, [100, 101, 102]);
+  });
+
   test('encodes E-STOP as run config stimulate off command', () {
     final codec = DbsFrameCodec();
     final frame = codec.encode(
@@ -119,4 +154,9 @@ void main() {
     expect(errorAck.isSuccess, isFalse);
     expect(DbsCommandResult.fromAck(errorAck).statusText, '状态错误');
   });
+}
+
+Uint8List _i16(int value) {
+  final data = ByteData(2)..setInt16(0, value, Endian.big);
+  return data.buffer.asUint8List();
 }

@@ -90,21 +90,19 @@ class _VisualizerPageState extends State<VisualizerPage>
           color: Colors.black, // 示波器深色背景
           child: Column(
             children: [
-              // EEG + ECG 双通道波形
+              // DBS-LFP 多电极波形 + ECG 波形
               Expanded(
-                flex: 3,
-                child: _WaveformCanvas(
-                  title: 'CH1: EEG (LFP)',
+                flex: 5,
+                child: _MultiLfpCanvas(
+                  channelData: state.dbsLfpChannelWaveforms,
                   sampleRate: state.eegStream.sampleRate,
-                  color: Colors.greenAccent,
-                  data: state.eegStream.waveform,
                   timeScale: _timeScale,
                   isPaused: _isPaused,
                 ),
               ),
               const Divider(color: Colors.white24, height: 1),
               Expanded(
-                flex: 3,
+                flex: 2,
                 child: state.isDemoMode
                     ? _DemoEcgCanvas(
                         data: state.ecgStream.waveform,
@@ -642,6 +640,249 @@ class _DemoEcgCanvas extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _MultiLfpCanvas extends StatelessWidget {
+  static const int defaultChannelCount = 8;
+
+  final Map<int, List<double>> channelData;
+  final int sampleRate;
+  final double timeScale;
+  final bool isPaused;
+
+  const _MultiLfpCanvas({
+    required this.channelData,
+    required this.sampleRate,
+    required this.timeScale,
+    required this.isPaused,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        CustomPaint(size: Size.infinite, painter: _GridPainter()),
+        CustomPaint(
+          size: Size.infinite,
+          painter: _MultiLfpPainter(
+            channelData: channelData,
+            sampleRate: sampleRate,
+            timeScale: timeScale,
+            defaultChannelCount: defaultChannelCount,
+          ),
+        ),
+        Positioned(
+          top: 12,
+          left: 16,
+          child: Row(
+            children: [
+              const Text(
+                'DBS-LFP 多电极',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${sampleRate}Hz',
+                style: const TextStyle(color: Colors.greenAccent, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MultiLfpPainter extends CustomPainter {
+  final Map<int, List<double>> channelData;
+  final int sampleRate;
+  final double timeScale;
+  final int defaultChannelCount;
+
+  _MultiLfpPainter({
+    required this.channelData,
+    required this.sampleRate,
+    required this.timeScale,
+    required this.defaultChannelCount,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final channels = channelData.keys.toList()..sort();
+    final visibleChannels = channels.isEmpty
+        ? List.generate(defaultChannelCount, (index) => index + 1)
+        : channels;
+    if (visibleChannels.isEmpty) return;
+
+    const topPad = 42.0;
+    const bottomPad = 8.0;
+    const labelWidth = 54.0;
+    const rightPad = 14.0;
+    final chartH = size.height - topPad - bottomPad;
+    final chartW = size.width - labelWidth - rightPad;
+    if (chartH <= 0 || chartW <= 0) return;
+
+    final separatorPaint = Paint()
+      ..color = Colors.white.withAlpha(28)
+      ..strokeWidth = 0.8;
+    final baselinePaint = Paint()
+      ..color = Colors.white.withAlpha(46)
+      ..strokeWidth = 0.9;
+    final wavePaint = Paint()
+      ..color = Colors.greenAccent
+      ..strokeWidth = 1.1
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final firstWeight = visibleChannels.length > 1 ? 1.28 : 1.0;
+    final totalWeight =
+        firstWeight + (visibleChannels.length - 1).clamp(0, 1000).toDouble();
+    var y = topPad;
+    var hasAnyData = false;
+
+    for (var row = 0; row < visibleChannels.length; row++) {
+      final channel = visibleChannels[row];
+      final rowWeight = row == 0 ? firstWeight : 1.0;
+      final rowH = chartH * rowWeight / totalWeight;
+      final rowTop = y;
+      final rowBottom = rowTop + rowH;
+      final baselineY = rowTop + rowH / 2;
+      final chartLeft = labelWidth;
+
+      canvas.drawLine(
+        Offset(chartLeft, rowTop),
+        Offset(size.width - rightPad, rowTop),
+        separatorPaint,
+      );
+      canvas.drawLine(
+        Offset(chartLeft, baselineY),
+        Offset(size.width - rightPad, baselineY),
+        baselinePaint,
+      );
+      _drawText(
+        canvas,
+        'E$channel',
+        Offset(12, baselineY),
+        Colors.white70,
+        12,
+        TextAlign.left,
+      );
+
+      final series = channelData[channel] ?? const <double>[];
+      if (series.isNotEmpty) {
+        hasAnyData = true;
+        _drawChannelWave(
+          canvas: canvas,
+          series: series,
+          bounds: Rect.fromLTRB(
+            chartLeft,
+            rowTop + 3,
+            size.width - rightPad,
+            rowBottom - 3,
+          ),
+          baselineY: baselineY,
+          paint: wavePaint,
+        );
+      }
+
+      y = rowBottom;
+    }
+
+    canvas.drawLine(
+      Offset(labelWidth, size.height - bottomPad),
+      Offset(size.width - rightPad, size.height - bottomPad),
+      separatorPaint,
+    );
+
+    if (!hasAnyData) {
+      _drawText(
+        canvas,
+        '等待 LFP 数据…',
+        Offset(labelWidth + chartW / 2, topPad + chartH / 2),
+        Colors.white24,
+        14,
+        TextAlign.center,
+      );
+    }
+  }
+
+  void _drawChannelWave({
+    required Canvas canvas,
+    required List<double> series,
+    required Rect bounds,
+    required double baselineY,
+    required Paint paint,
+  }) {
+    var visiblePoints = (timeScale * sampleRate).toInt();
+    if (visiblePoints < 2) visiblePoints = 2;
+    final startIdx = series.length > visiblePoints
+        ? series.length - visiblePoints
+        : 0;
+    final visibleData = series.sublist(startIdx);
+    if (visibleData.isEmpty) return;
+
+    var maxAbs = 0.0;
+    for (final value in visibleData) {
+      final absValue = value.abs();
+      if (absValue > maxAbs) maxAbs = absValue;
+    }
+    if (maxAbs < 1.0) maxAbs = 1.0;
+
+    final yScale = bounds.height * 0.42 / maxAbs;
+    final xStep = bounds.width / (visiblePoints - 1);
+    final path = Path();
+
+    for (var i = 0; i < visibleData.length; i++) {
+      final x = bounds.left + i * xStep;
+      final unclampedY = baselineY - visibleData[i] * yScale;
+      final y = unclampedY.clamp(bounds.top, bounds.bottom).toDouble();
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawText(
+    Canvas canvas,
+    String text,
+    Offset anchor,
+    Color color,
+    double fontSize,
+    TextAlign align,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: fontSize,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textAlign: align,
+    )..layout();
+    var dx = anchor.dx;
+    if (align == TextAlign.center) {
+      dx = anchor.dx - painter.width / 2;
+    } else if (align == TextAlign.right) {
+      dx = anchor.dx - painter.width;
+    }
+    painter.paint(canvas, Offset(dx, anchor.dy - painter.height / 2));
+  }
+
+  @override
+  bool shouldRepaint(covariant _MultiLfpPainter oldDelegate) {
+    return oldDelegate.channelData != channelData ||
+        oldDelegate.sampleRate != sampleRate ||
+        oldDelegate.timeScale != timeScale;
   }
 }
 

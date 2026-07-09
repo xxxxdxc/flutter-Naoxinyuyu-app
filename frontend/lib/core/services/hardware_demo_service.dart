@@ -22,7 +22,10 @@ enum DemoCalibrationStage {
 
 class HardwareDemoService {
   static const int hrvSampleRate = 500;
+  // 演示 LFP 采用 250 Hz，和真实 DBS Stream Data 走同一套解码/绘图链路。
   static const int lfpSampleRate = 250;
+  static const int lfpChannelCount = 8;
+  static const int lfpFrameSampleCount = 12;
   static const int baselineSegments = 7;
   static const int stressSegments = 2;
   static const int secondsPerSegment = 60;
@@ -92,11 +95,13 @@ class HardwareDemoService {
         _hrvController.add(packet);
       }
     });
+    // 演示模式下每秒生成一批 DBS LFP 数据，最终会显示为 8 路电极波形。
     _dbsTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_stage.index >= DemoCalibrationStage.connectingChestStrap.index) {
         _emitDbsStreamFrame();
       }
     });
+    // 定期补发 DBS 状态和感测配置，让设备详情保持有数据。
     _dbsStatusTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (_stage.index >= DemoCalibrationStage.connectingChestStrap.index) {
         _emitDbsInitialState();
@@ -259,6 +264,7 @@ class HardwareDemoService {
       ? max(1, _stageElapsedSeconds)
       : 0;
 
+  /// 构造演示用 DBS 设备状态帧，模拟电量、温度和电压等基础状态。
   Uint8List buildDbsDeviceStatusFrame() {
     return _dbsCodec.encode(
       command: DbsProtocol.commandDeviceStatus,
@@ -272,9 +278,13 @@ class HardwareDemoService {
     );
   }
 
+  /// 构造演示用 LFP Stream Data 帧。
+  ///
+  /// 数据格式与真实 DBS Stream Data 一致：时间戳、通道掩码、点数和 int16 样本。
+  /// 这里生成 8 个通道，每路叠加不同相位、幅值和少量噪声，便于演示多电极波形。
   Uint8List buildDbsStreamFrame({
     int tick = 0,
-    int sampleCount = lfpSampleRate,
+    int sampleCount = lfpFrameSampleCount,
   }) {
     final now = DateTime.now();
     final seconds = now.millisecondsSinceEpoch ~/ 1000;
@@ -282,16 +292,20 @@ class HardwareDemoService {
     final payload = BytesBuilder(copy: false)
       ..add(_u32(seconds))
       ..add(_u16(millis))
-      ..add(_u16(0x0001))
+      ..add(_u16((1 << lfpChannelCount) - 1))
       ..addByte(sampleCount.clamp(0, 255).toInt());
     for (var i = 0; i < sampleCount; i++) {
       final t = (tick * sampleCount + i) / lfpSampleRate;
-      final lfp =
-          180 * sin(2 * pi * 12 * t) +
-          70 * sin(2 * pi * 24 * t) +
-          (_stimulating ? 28 * sin(2 * pi * 125 * t) : 0) +
-          (_random.nextDouble() - 0.5) * 12;
-      payload.add(_i16(lfp.round().clamp(-32768, 32767)));
+      for (var channel = 1; channel <= lfpChannelCount; channel++) {
+        final phase = channel * pi / 9;
+        final amplitude = 150.0 - channel * 8;
+        final lfp =
+            amplitude * sin(2 * pi * (8 + channel) * t + phase) +
+            45 * sin(2 * pi * (18 + channel * 0.5) * t) +
+            (_stimulating ? 18 * sin(2 * pi * 125 * t + phase) : 0) +
+            (_random.nextDouble() - 0.5) * 10;
+        payload.add(_i16(lfp.round().clamp(-32768, 32767)));
+      }
     }
     return _dbsCodec.encode(
       command: DbsProtocol.commandStreamData,
@@ -409,12 +423,16 @@ class HardwareDemoService {
   }
 
   void _emitDbsInitialState() {
+    // 初始状态包含设备状态、LFP 采样配置和当前刺激参数。
     _emitDbsFrame(buildDbsDeviceStatusFrame());
     _emitDbsFrame(
       _dbsCodec.encode(
         command: DbsProtocol.commandSensingConfig,
         pdus: [
-          DbsPdu(opcode: 0x04, data: DbsFrameCodec.u16(0x0001)),
+          DbsPdu(
+            opcode: 0x04,
+            data: DbsFrameCodec.u16((1 << lfpChannelCount) - 1),
+          ),
           DbsPdu(opcode: 0x05, data: DbsFrameCodec.u16(lfpSampleRate)),
         ],
       ),
@@ -429,6 +447,7 @@ class HardwareDemoService {
   }
 
   void _emitDbsRunStatus() {
+    // bit1 表示刺激开关，bit4 表示 LFP 采样开关。
     final bitmask = (_stimulating ? (1 << 1) : 0) | (1 << 4);
     _emitDbsFrame(
       _dbsCodec.encode(
@@ -442,9 +461,13 @@ class HardwareDemoService {
   }
 
   void _emitDbsStreamFrame() {
-    _emitDbsFrame(buildDbsStreamFrame(tick: _dbsTick++));
+    final framesPerSecond = (lfpSampleRate / lfpFrameSampleCount).ceil();
+    for (var i = 0; i < framesPerSecond; i++) {
+      _emitDbsFrame(buildDbsStreamFrame(tick: _dbsTick++));
+    }
   }
 
+  /// 演示服务不走真实 BLE，而是先编码再解码，确保演示数据经过真实协议解析路径。
   void _emitDbsFrame(Uint8List bytes) {
     final frame = _dbsCodec.decodeFrame(bytes);
     if (frame == null) return;

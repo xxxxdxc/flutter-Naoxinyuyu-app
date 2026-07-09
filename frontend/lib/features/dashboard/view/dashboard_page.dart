@@ -225,7 +225,7 @@ class _DevicePanelContentState extends State<_DevicePanelContent> {
   }
 
   String _getDbsSubtitle(GlobalAppState state) {
-    if (_isDbsConnecting) return '连接中...';
+    if (_isDbsConnecting) return _formatDbsDiagnostic('连接中', state);
     if (state.isDbsConnected) {
       final temp = state.dbsTemperatureC == null
           ? ''
@@ -238,8 +238,47 @@ class _DevicePanelContentState extends State<_DevicePanelContent> {
     if (state.isDemoMode) {
       return '${state.dbsConnection.deviceName ?? '演示设备 - DBS'} 待连接';
     }
-    if (state.dbsConnection.status == ConnectionStatus.error) return '连接异常';
+    if (state.dbsConnection.status == ConnectionStatus.error) {
+      return _formatDbsDiagnostic('连接异常', state);
+    }
     return '未连接';
+  }
+
+  String _formatDbsDiagnostic(String prefix, GlobalAppState state) {
+    final gatt = state.dbsGattDiagnostic;
+    final phase = switch (gatt.failureKind) {
+      'deviceNotFound' => '扫描阶段失败',
+      'pairingFailed' => '配对阶段失败',
+      'bleConnectionFailed' => 'BLE 连接阶段失败',
+      'missingService' => 'GATT 服务发现失败',
+      'unknown' => '未知阶段失败',
+      _ => prefix,
+    };
+    final parts = <String>[gatt.connectionStage];
+    if (gatt.scanSource != null && gatt.scanSource!.isNotEmpty) {
+      parts.add(gatt.scanSource!);
+    }
+    if (gatt.systemDeviceCount > 0 || gatt.scanSeenCount > 0) {
+      parts.add(
+        '系统设备${gatt.systemDeviceCount}个/扫描${gatt.scanSeenCount}个/匹配${gatt.scanMatchedCount}个',
+      );
+    }
+    if (gatt.deviceName != null && gatt.deviceName!.isNotEmpty) {
+      parts.add(gatt.deviceName!);
+    }
+    if (gatt.rssi != null) {
+      parts.add('${gatt.rssi} dBm');
+    }
+    if (gatt.lastCandidateSummary != null &&
+        gatt.lastCandidateSummary!.isNotEmpty &&
+        gatt.failureKind == 'deviceNotFound') {
+      parts.add('最后候选 ${gatt.lastCandidateSummary}');
+    }
+    final detail = parts.join(' · ');
+    if (gatt.lastError == null || gatt.lastError!.isEmpty) {
+      return '$phase：$detail';
+    }
+    return '$phase：$detail：${gatt.lastError}';
   }
 
   Widget _buildHrvTrailing(GlobalAppState state) {
@@ -1302,10 +1341,7 @@ class _CalibrationPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildSignalQualityCheck(
-    BuildContext context,
-    GlobalAppState state,
-  ) {
+  Widget _buildSignalQualityCheck(BuildContext context, GlobalAppState state) {
     final quality = state.signalQualityPercent.clamp(0, 100);
     return _buildCard(
       context: context,

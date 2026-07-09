@@ -581,6 +581,7 @@ class GlobalAppState extends ChangeNotifier {
   StreamSubscription<bool>? _bleConnSub;
   StreamSubscription<DbsEvent>? _dbsEventSub;
   StreamSubscription<bool>? _dbsConnSub;
+  StreamSubscription<DbsGattDiagnostic>? _dbsDiagnosticSub;
   StreamSubscription<BlePacket>? _demoHrvSub;
   StreamSubscription<DbsEvent>? _demoDbsSub;
   final SessionHistoryService _historyService = SessionHistoryService();
@@ -599,6 +600,8 @@ class GlobalAppState extends ChangeNotifier {
   List<SessionSummary> get historySessions => _historySessions;
   bool get isLoadingHistory => _isLoadingHistory;
 
+  // ========== DBS 设备状态与联调结果 ==========
+  // 这些字段由 DbsBleService 的事件流驱动，用于设备卡片、控制页和历史记录。
   DbsDeviceStatus? _dbsDeviceStatus;
   DbsSensingConfig? _dbsSensingConfig;
   DbsStimParams? _dbsStimParams;
@@ -616,7 +619,9 @@ class GlobalAppState extends ChangeNotifier {
   int _dbsLfpSamples = 0;
   DateTime? _lastDbsStreamLogAt;
   Timer? _dbsLfpFlushTimer;
-  final List<double> _dbsLfpBuffer = [];
+  // DBS Stream Data 先按通道进入缓冲区，再由定时器批量刷新到多通道波形。
+  final Map<int, List<double>> _dbsLfpBuffers = {};
+  Map<int, List<double>> _dbsLfpWaveforms = {};
 
   DbsDeviceStatus? get dbsDeviceStatus => _dbsDeviceStatus;
   DbsSensingConfig? get dbsSensingConfig => _dbsSensingConfig;
@@ -645,7 +650,20 @@ class GlobalAppState extends ChangeNotifier {
   double? get dbsTemperatureC => _dbsDeviceStatus?.deviceTemperatureC;
   bool get isDbsStimulating =>
       _dbsRunStatus?.stimulateOn ?? stimulation.status == StimStatus.running;
-  bool get hasDbsLfpData => eegStream.waveform.isNotEmpty && isDbsConnected;
+  bool get hasDbsLfpData =>
+      _dbsLfpWaveforms.values.any((waveform) => waveform.isNotEmpty) &&
+      isDbsConnected;
+  Map<int, List<double>> get dbsLfpChannelWaveforms => {
+    for (final entry in _dbsLfpWaveforms.entries)
+      entry.key: List<double>.unmodifiable(entry.value),
+  };
+  List<int> get dbsLfpActiveChannels {
+    final channels = <int>{
+      ..._dbsLfpWaveforms.keys,
+      ..._dbsLfpBuffers.keys,
+    }.toList()..sort();
+    return channels;
+  }
 
   // STR 引擎状态
   int _engineState = 0;
@@ -891,7 +909,7 @@ class GlobalAppState extends ChangeNotifier {
     _dbsLfpFlushTimer?.cancel();
     _dbsLfpFlushTimer = null;
     _bleEcgBuffer.clear();
-    _dbsLfpBuffer.clear();
+    _clearDbsLfpData();
     _rPeakAbsoluteIndices.clear();
     _rPeakIndices = [];
     _lastDbsStressSentAt = null;
@@ -980,7 +998,7 @@ class GlobalAppState extends ChangeNotifier {
     _lastDbsStressState = null;
     _dbsLfpSamples = 0;
     _bleEcgBuffer.clear();
-    _dbsLfpBuffer.clear();
+    _clearDbsLfpData();
     _totalEcgSamples = 0;
     _rPeakAbsoluteIndices.clear();
     _rPeakIndices = [];
@@ -1143,10 +1161,14 @@ class GlobalAppState extends ChangeNotifier {
     dbsConnection = DeviceConnectionState(status: ConnectionStatus.connecting);
     notifyListeners();
 
+    // DBS 服务只输出结构化事件；这里负责把事件落到全局状态和历史记录。
     _dbsEventSub ??= _dbsService.eventStream.listen(
       _onDbsEvent,
       onError: _onDbsError,
     );
+    _dbsDiagnosticSub ??= _dbsService.diagnosticStream.listen((_) {
+      notifyListeners();
+    });
     _dbsConnSub ??= _dbsService.connectionStateStream.listen((connected) {
       if (connected) {
         dbsConnection = DeviceConnectionState(
@@ -1162,7 +1184,7 @@ class GlobalAppState extends ChangeNotifier {
         );
         _dbsLfpFlushTimer?.cancel();
         _dbsLfpFlushTimer = null;
-        _dbsLfpBuffer.clear();
+        _clearDbsLfpData();
       }
       notifyListeners();
     });
@@ -1192,6 +1214,8 @@ class GlobalAppState extends ChangeNotifier {
             },
           ),
         );
+        _clearDbsLfpData();
+        // 连接后立即开始 LFP 波形刷新，真正的数据由 _onDbsEvent 写入缓冲区。
         _startDbsLfpFlushTimer();
         eegStream = eegStream.copyWith(
           status: StreamStatus.streaming,
@@ -1200,6 +1224,7 @@ class GlobalAppState extends ChangeNotifier {
         );
         _dbsLfpSamples = 0;
         try {
+          // 初始查询用于补齐电量、采样配置、刺激参数和运行状态。
           await _dbsService.queryInitialState();
         } catch (e) {
           final result = DbsCommandResult.failure(
@@ -1223,6 +1248,7 @@ class GlobalAppState extends ChangeNotifier {
           message: '开启 LFP 感测中',
         );
         notifyListeners();
+        // 联调默认打开实时感测和 LFP 感测，固件是否真正开始上传以 ACK 和 Stream 为准。
         final sensingResult = await _dbsService.setSensingEnabledAndWaitAck(
           liveEnabled: true,
           lfpEnabled: true,
@@ -1251,6 +1277,8 @@ class GlobalAppState extends ChangeNotifier {
       _dbsEventSub = null;
       await _dbsConnSub?.cancel();
       _dbsConnSub = null;
+      await _dbsDiagnosticSub?.cancel();
+      _dbsDiagnosticSub = null;
       dbsConnection = DeviceConnectionState(status: ConnectionStatus.error);
       notifyListeners();
       rethrow;
@@ -1264,11 +1292,13 @@ class GlobalAppState extends ChangeNotifier {
     }
     _dbsLfpFlushTimer?.cancel();
     _dbsLfpFlushTimer = null;
-    _dbsLfpBuffer.clear();
+    _clearDbsLfpData();
     await _dbsEventSub?.cancel();
     _dbsEventSub = null;
     await _dbsConnSub?.cancel();
     _dbsConnSub = null;
+    await _dbsDiagnosticSub?.cancel();
+    _dbsDiagnosticSub = null;
     await _historyService.recordDbsEvent(
       'disconnect',
       data: {'deviceName': dbsConnection.deviceName ?? 'DBS 设备'},
@@ -1343,6 +1373,7 @@ class GlobalAppState extends ChangeNotifier {
     }
 
     final score = (_emotionScore * 100).round().clamp(0, 100);
+    // 每次正式下发都记录序号和分数，便于和 DBS 固件日志对齐。
     _dbsStressSeq += 1;
     _lastDbsStressSentAt = now;
     _lastDbsStressScore = score;
@@ -1407,6 +1438,7 @@ class GlobalAppState extends ChangeNotifier {
     if (_isDbsEmergencyStopped) {
       throw StateError('急停已触发，请断开并重新连接 DBS 后再下发参数');
     }
+    // 参数同步先等参数配置 ACK，再单独发送启动刺激命令。
     final syncResult = await _dbsService.syncStimParamsAndWaitAck(
       intensityMa: intensityMa,
       frequencyHz: frequencyHz,
@@ -1515,6 +1547,7 @@ class GlobalAppState extends ChangeNotifier {
     _lastDbsCommandResult = _lastDbsEmergencyStopResult;
     notifyListeners();
 
+    // 当前急停实现复用“关闭刺激”命令，最终锁定/恢复规则仍以 DBS 固件为准。
     final ackResult = await _dbsService.emergencyStopAndWaitAck();
     final result = ackResult.isSuccess
         ? DbsCommandResult(
@@ -1820,6 +1853,7 @@ class GlobalAppState extends ChangeNotifier {
   }
 
   void _onDbsEvent(DbsEvent event) {
+    // DBS 事件是连接服务到 UI 状态的唯一入口：状态、ACK、LFP 流都在这里分流。
     if (event is DbsDeviceStatus) {
       _dbsDeviceStatus = _dbsDeviceStatus == null
           ? event
@@ -1896,9 +1930,14 @@ class GlobalAppState extends ChangeNotifier {
         ),
       );
     } else if (event is DbsStreamData) {
-      if (event.firstChannelSamples.isNotEmpty) {
-        _dbsLfpBuffer.addAll(event.firstChannelSamples);
-        _dbsLfpSamples += event.firstChannelSamples.length;
+      if (event.channelSamples.isNotEmpty) {
+        for (final entry in event.channelSamples.entries) {
+          if (entry.value.isEmpty) continue;
+          _dbsLfpBuffers
+              .putIfAbsent(entry.key, () => <double>[])
+              .addAll(entry.value);
+        }
+        _dbsLfpSamples += event.sampleCount;
         if (eegStream.sampleRate != event.sampleRate) {
           eegStream = eegStream.copyWith(sampleRate: event.sampleRate);
         }
@@ -1908,11 +1947,13 @@ class GlobalAppState extends ChangeNotifier {
                 const Duration(seconds: 1)) {
           _lastDbsStreamLogAt = now;
           unawaited(
+            // LFP 数据量很大，历史记录只写每秒摘要，避免 dbs.jsonl 快速膨胀。
             _historyService.recordDbsEvent(
               'lfp_stream_summary',
               data: {
                 'sampleTimestamp': event.sampleTimestamp.toIso8601String(),
                 'channelMask': event.channelMask,
+                'channels': event.channelSamples.keys.toList()..sort(),
                 'sampleCount': event.sampleCount,
                 'sampleRate': event.sampleRate,
                 'totalLfpSamples': _dbsLfpSamples,
@@ -2028,26 +2069,51 @@ class GlobalAppState extends ChangeNotifier {
         ? const Duration(seconds: 1)
         : const Duration(milliseconds: 50);
     _dbsLfpFlushTimer = Timer.periodic(interval, (_) {
-      if (_dbsLfpBuffer.isEmpty || !isDbsConnected) return;
+      final hasBufferedData = _dbsLfpBuffers.values.any(
+        (buffer) => buffer.isNotEmpty,
+      );
+      if (!hasBufferedData || !isDbsConnected) return;
 
-      final newWave = List<double>.from(eegStream.waveform)
-        ..addAll(_dbsLfpBuffer);
-      _dbsLfpBuffer.clear();
-
+      // 将每个 DBS LFP 通道缓冲追加到对应波形，并保留最近 10 秒用于滚动显示。
+      final nextWaveforms = <int, List<double>>{
+        for (final entry in _dbsLfpWaveforms.entries)
+          entry.key: List<double>.from(entry.value),
+      };
       final maxSamples = (eegStream.sampleRate * 10).toInt();
-      if (newWave.length > maxSamples) {
-        newWave.removeRange(0, newWave.length - maxSamples);
+      for (final entry in _dbsLfpBuffers.entries) {
+        if (entry.value.isEmpty) continue;
+        final waveform = nextWaveforms.putIfAbsent(entry.key, () => <double>[])
+          ..addAll(entry.value);
+        entry.value.clear();
+        if (waveform.length > maxSamples) {
+          waveform.removeRange(0, waveform.length - maxSamples);
+        }
       }
+      _dbsLfpWaveforms = nextWaveforms;
+
+      final firstChannel = dbsLfpActiveChannels.isEmpty
+          ? null
+          : dbsLfpActiveChannels.first;
+      final firstChannelWaveform = firstChannel == null
+          ? const <double>[]
+          : _dbsLfpWaveforms[firstChannel] ?? const <double>[];
 
       eegStream = eegStream.copyWith(
         status: StreamStatus.streaming,
-        waveform: newWave,
+        waveform: List<double>.from(firstChannelWaveform),
         duration: Duration(
           milliseconds: (_dbsLfpSamples * 1000 ~/ eegStream.sampleRate),
         ),
       );
       notifyListeners();
     });
+  }
+
+  void _clearDbsLfpData() {
+    _dbsLfpBuffers.clear();
+    _dbsLfpWaveforms = {};
+    _dbsLfpSamples = 0;
+    eegStream = eegStream.copyWith(waveform: []);
   }
 
   /// 获取瞬时心率（最近一次值）
@@ -2090,6 +2156,7 @@ class GlobalAppState extends ChangeNotifier {
     _bleConnSub?.cancel();
     _dbsEventSub?.cancel();
     _dbsConnSub?.cancel();
+    _dbsDiagnosticSub?.cancel();
     _demoHrvSub?.cancel();
     _demoDbsSub?.cancel();
     _bleService.dispose();

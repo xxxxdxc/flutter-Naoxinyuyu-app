@@ -3,6 +3,10 @@ import 'dart:typed_data';
 
 import 'dbs_models.dart';
 
+/// DBS 二进制协议的集中编解码器。
+///
+/// 这里负责把 App 内部的 command + PDU 列表打包成 BLE 写入字节，
+/// 也负责把 DBS Notify / Stream Data 的原始字节解析成结构化事件数据。
 class DbsFrameCodec {
   static const int preamble = 0xA5;
   static const int maxPlainDataLength = 232;
@@ -17,6 +21,7 @@ class DbsFrameCodec {
     bool encrypted = false,
     DateTime? timestamp,
   }) {
+    // PDU 区格式：opcode(1B) + length(2B, big-endian) + data(NB)。
     final dataBuilder = BytesBuilder(copy: false);
     for (final pdu in pdus) {
       dataBuilder.addByte(pdu.opcode & 0xFF);
@@ -38,6 +43,7 @@ class DbsFrameCodec {
     final rolling = _txCounter & 0x0F;
     _txCounter = (_txCounter + 1) & 0x0F;
 
+    // flags 高 4 位为 rolling counter，低位分别标记加密和是否请求 ACK。
     final flags =
         (rolling << 4) |
         ((encrypted ? 1 : 0) << 3) |
@@ -57,6 +63,9 @@ class DbsFrameCodec {
     return builder.toBytes();
   }
 
+  /// 解析 DBS 返回的一帧数据。
+  ///
+  /// 当前实现只支持单包明文帧；如果固件开启加密或分包，需要在这里扩展。
   DbsFrame? decodeFrame(List<int> bytes) {
     if (bytes.length < headerLength) return null;
     if (bytes[0] != preamble) return null;
@@ -98,6 +107,7 @@ class DbsFrameCodec {
     );
   }
 
+  /// 将帧内 data 区拆成多个 PDU。长度不完整时停止解析，避免数组越界。
   List<DbsPdu> _decodePdus(Uint8List data) {
     final pdus = <DbsPdu>[];
     var offset = 0;
@@ -121,6 +131,7 @@ class DbsFrameCodec {
     _txCounter = 0;
   }
 
+  /// 构造 HRV/STR 压力分数载荷，供 DBS 闭环算法作为辅助输入。
   static Uint8List buildStressPayload(DbsStressScore score) {
     final builder = BytesBuilder(copy: false)
       ..addByte(score.smoothedPercent)
@@ -196,6 +207,7 @@ class DbsFrameCodec {
     return utf8.decode(data, allowMalformed: true).replaceAll('\u0000', '');
   }
 
+  /// 解析设备状态 PDU。每个 opcode 对应固件上报的一个状态字段。
   static DbsDeviceStatus parseDeviceStatus(DbsFrame frame) {
     DbsDeviceStatus status = DbsDeviceStatus(receivedAt: DateTime.now());
     for (final pdu in frame.pdus) {
@@ -307,6 +319,7 @@ class DbsFrameCodec {
     return status;
   }
 
+  /// 解析感测配置，LFP 采样率会影响后续波形时间轴。
   static DbsSensingConfig parseSensingConfig(DbsFrame frame) {
     int? liveMask;
     int? liveRate;
@@ -335,6 +348,7 @@ class DbsFrameCodec {
     );
   }
 
+  /// 解析刺激参数回读或配置反馈，用于同步控制页显示。
   static DbsStimParams parseStimParams(DbsFrame frame) {
     var group = 1;
     var method = 0;
@@ -366,6 +380,7 @@ class DbsFrameCodec {
     );
   }
 
+  /// 解析运行开关状态。bitmask 和单独 opcode 都可能携带相同开关信息。
   static DbsRunStatus parseRunStatus(DbsFrame frame) {
     int? bitmask;
     int? activeGroup;
@@ -407,6 +422,11 @@ class DbsFrameCodec {
     );
   }
 
+  /// 解析 Stream Data 中的 LFP 数据块。
+  ///
+  /// PDU 0x00 的 data 布局为：
+  /// seconds(4B) + millis(2B) + channelMask(2B) + sampleCount(1B)
+  /// + 按采样点交织排列的 int16 通道样本。
   static DbsStreamData? parseStreamData(
     DbsFrame frame, {
     int sampleRate = 1000,
@@ -434,6 +454,7 @@ class DbsFrameCodec {
     final channelSamples = <int, List<double>>{
       for (final channel in channels) channel: <double>[],
     };
+    // 样本按 datapoint -> channel 的顺序交织，按 channelMask 拆回各通道数组。
     var offset = 9;
     for (var dp = 0; dp < sampleCount; dp++) {
       for (final channel in channels) {

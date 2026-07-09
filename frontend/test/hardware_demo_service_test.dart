@@ -44,7 +44,10 @@ void main() {
     final codec = DbsFrameCodec();
 
     final frame = codec.decodeFrame(
-      service.buildDbsStreamFrame(tick: 4, sampleCount: 16),
+      service.buildDbsStreamFrame(
+        tick: 4,
+        sampleCount: HardwareDemoService.lfpFrameSampleCount,
+      ),
     )!;
     final stream = DbsFrameCodec.parseStreamData(
       frame,
@@ -52,10 +55,24 @@ void main() {
     )!;
 
     expect(frame.command, DbsProtocol.commandStreamData);
-    expect(stream.channelMask, equals(0x0001));
-    expect(stream.sampleCount, equals(16));
+    expect(stream.channelMask, equals(0x00FF));
+    expect(stream.sampleCount, equals(HardwareDemoService.lfpFrameSampleCount));
     expect(stream.sampleRate, equals(HardwareDemoService.lfpSampleRate));
-    expect(stream.firstChannelSamples, hasLength(16));
+    expect(stream.channelSamples, hasLength(HardwareDemoService.lfpChannelCount));
+    for (
+      var channel = 1;
+      channel <= HardwareDemoService.lfpChannelCount;
+      channel++
+    ) {
+      expect(
+        stream.channelSamples[channel],
+        hasLength(HardwareDemoService.lfpFrameSampleCount),
+      );
+    }
+    expect(
+      stream.firstChannelSamples,
+      hasLength(HardwareDemoService.lfpFrameSampleCount),
+    );
   });
 
   test('demo calibration flow uses 7 baseline and 2 stress minutes', () async {
